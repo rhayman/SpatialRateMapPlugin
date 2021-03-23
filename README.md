@@ -30,7 +30,7 @@ There are a few menu entries that I'm enhancing currently (23/03/21) to allow th
 
 Dependencies
 ============
-- astropy - this is the most obvious one; it's used for the spatial autocorrelograms as it handles NaNs in its convolution routines better than scipy/ numpy.
+- astropy (https://www.astropy.org/) - this is the most obvious one; it's used for the spatial autocorrelograms as it handles NaNs in its convolution routines better than scipy/ numpy.
 
 Contributors
 ============
