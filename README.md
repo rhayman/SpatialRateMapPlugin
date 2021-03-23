@@ -14,7 +14,7 @@ git clone or download the SpatialRateMapPlugin.py file into the folder usually l
 
 You also need to add a line to $HOME/.phy/phy_config.py which looks like:
 
->>> c.TemplateGUI.plugins = ['SpatialRateMapPlugin']
+`c.TemplateGUI.plugins = ['SpatialRateMapPlugin']`
 
 Usage
 =====
