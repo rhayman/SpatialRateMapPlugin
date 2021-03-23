@@ -1,12 +1,17 @@
-# import from plugins/matplotlib_view.py
-"""Show how to create a custom matplotlib view in the GUI."""
-
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 import numpy as np
 import matplotlib.pylab as plt
 from matplotlib.cm import jet
+from astropy import convolution # deals with nans unlike other convs
+# Suppress warnings generated from doing the ffts for the spatial autocorrelogram
+# see autoCorr2D and crossCorr2D
+import warnings
+warnings.filterwarnings("ignore", message="invalid value encountered in sqrt")
+warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
+warnings.filterwarnings("ignore", message="invalid value encountered in greater")
+warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
 
 class SpatialRateMap(ManualClusteringView):
 	plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
@@ -40,14 +45,20 @@ class SpatialRateMap(ManualClusteringView):
 			self.RateMapMaker.spk_clusters = np.load('spike_clusters.npy')
 		else:
 			self.RateMapMaker.spk_clusters = None
+		# start out with 2D ratemaps as the default plot type
+		self.plot_type = "ratemap"
 
 	def on_select(self, cluster_ids=(), **kwargs):
 		self.cluster_ids = cluster_ids
 		# We don't display anything if no clusters are selected.
 		if not cluster_ids:
 			return
-		
-		self.RateMapMaker.makeRateMap(cluster_ids[0], ax=self.canvas.ax)
+		if 'ratemap' in self.plot_type:
+			self.RateMapMaker.makeRateMap(cluster_ids[0], ax=self.canvas.ax)
+		else if 'head_direction' in self.plot_type:
+			self.RateMapMaker.makeHDPlot(cluster_ids[0],  ax=self.canvas.ax)
+		else if 'spikes_on_path' in self.plot_type:
+			self.RateMapMaker.makeSpikePathPlot(cluster_ids[0], ax=self.canvas.ax)
 
 		# Use this to update the matplotlib figure.
 		self.canvas.update()
@@ -62,10 +73,19 @@ class SpatialRateMap(ManualClusteringView):
 		"""
 		super(SpatialRateMap, self).attach(gui)
 
-		self.actions.add(callback=self.emptyCallBack, name="MyMenu", menu="Test", view=self, show_shortcut=False)
+		self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path", menu="Test", view=self, show_shortcut=False)
+		self.actions.add(callback=self.plotHeadDirection, name="head_direction", menu="Test", view=self, show_shortcut=False)
 
-	def emptyCallBack(self):
-		print("YO")
+	def plotSpikesOnPath(self):
+		self.RateMapMaker.makeSpikePathPlot(self.cluster_ids[0], ax=self.canvas.ax)
+		self.plot_type = "spikes_on_path"
+
+	def plotHeadDirection(self):
+		self.RateMapMaker.makeHDPlot(self.cluster_ids[0], ax=self.canvas.ax)
+		self.plot_type = "head_direction"
+
+	# def plotSpatialAutocorr(self):
+	# 	self.RateMapMaker.makeSAC()
 
 
 class SpatialRateMapPlugin(IPlugin):
@@ -75,468 +95,6 @@ class SpatialRateMapPlugin(IPlugin):
 			return SpatialRateMap(features=controller._get_features)
 		controller.view_creator['SpatialRateMap'] = create_feature_density_view
 	
-		
-
-
-class PosCalcsGeneric(object):
-	"""
-	Generic class for post-processing of position data
-	Uses numpys masked arrays for dealing with bad positions, filtering etc
-
-	Parameters
-	----------
-	x, y : array_like
-		The x and y positions.
-	ppm : int
-		Pixels per metre
-	cm : boolean
-		Whether everything is converted into cms or not
-	jumpmax : int
-		Jumps in position (pixel coords) greater than this are bad
-
-	Notes
-	-----
-	The positional data (x,y) is turned into a numpy masked array once this
-	class is initialised - that mask is then modified through various
-	functions (postprocesspos being the main one).
-	"""
-	def __init__(self, x, y, ppm, cm=True, jumpmax=100):
-		assert np.shape(x) == np.shape(y)
-		self.xy = np.ma.MaskedArray([x, y])
-		self.dir = np.ma.MaskedArray(np.zeros_like(x))
-		self.speed = None
-		self.ppm = ppm
-		self.cm = cm
-		self.jumpmax = jumpmax
-		self.nleds = np.ndim(x)
-		self.npos = len(x)
-		self.tracker_params = None
-		self.sample_rate = None
-
-	def postprocesspos(self, tracker_params, **kwargs)->tuple:
-		"""
-		Post-process position data
-
-		Parameters
-		----------
-		tracker_params : dict
-			Same dict as created in OEKiloPhy.Settings.parsePos
-			(from module openephys2py)
-			Contains key / values describing the spatial extent of the pos data
-			keys = LeftBorder, RightBorder, TopBorder, BottomBorder and SampleRate
-
-		Returns
-		-------
-		xy, hdir : np.ma.MaskedArray
-			The post-processed position data
-
-		Notes
-		-----
-		Several internal functions are called here: speefilter, interpnans, smoothPos
-		and calcSpeed. Some internal state/ instance variables are set as well. The
-		mask of the positional data (an instance of numpy masked array) is modified
-		throughout this method.
-
-		"""
-		xy = self.xy
-		xy = np.ma.MaskedArray(xy, dtype=np.int32)
-		x_zero = xy[:, 0] < 0
-		y_zero = xy[:, 1] < 0
-		xy[np.logical_or(x_zero, y_zero), :] = np.ma.masked
-
-		self.tracker_params = tracker_params
-		if 'LeftBorder' in tracker_params.keys():
-			min_x = tracker_params['LeftBorder']
-		else:
-			min_x = np.min(xy[:,0])
-		xy[:, xy[0,:] <= min_x] = np.ma.masked
-		if 'TopBorder' in tracker_params.keys():
-			min_y = tracker_params['TopBorder'] # y origin at top
-		else:
-			min_y = np.min(xy[:,1])
-		xy[:, xy[1,:] <= min_y] = np.ma.masked
-		if 'RightBorder' in tracker_params.keys():
-			max_x = tracker_params['RightBorder']
-		else:
-			max_x = np.max(xy[:,0])
-		xy[:, xy[0,:] >= max_x] = np.ma.masked
-		if 'BottomBorder' in tracker_params.keys():
-			max_y = tracker_params['BottomBorder']
-		else:
-			max_y = np.max(xy[:,1])
-		xy[:, xy[1,:] >= max_y] = np.ma.masked
-		if 'SampleRate' in tracker_params.keys():
-			self.sample_rate = int(tracker_params['SampleRate'])
-		else:
-			self.sample_rate = 30
-
-		xy = xy.T
-		xy = self.speedfilter(xy)
-		xy = self.interpnans(xy) # ADJUST THIS SO NP.MASKED ARE INTERPOLATED OVER
-		xy = self.smoothPos(xy)
-		self.calcSpeed(xy)
-
-		import math
-		pos2 = np.arange(0, self.npos-1)
-		xy_f = xy.astype(np.float)
-		self.dir[pos2] = np.mod(((180/math.pi) * (np.arctan2(-xy_f[1, pos2+1] + xy_f[1,pos2],+xy_f[0,pos2+1]-xy_f[0,pos2]))), 360)
-		self.dir[-1] = self.dir[-2]
-
-		hdir = self.dir
-
-		return xy, hdir
-
-	def speedfilter(self, xy):
-		"""
-		Filters speed
-
-		Parameters
-		----------
-		xy : np.ma.MaskedArray
-			The xy data
-
-		Returns
-		-------
-		xy : np.ma.MaskedArray
-			The xy data with speeds > self.jumpmax masked
-		"""
-		
-		disp = np.hypot(xy[:,0], xy[:,1])
-		disp = np.diff(disp, axis=0)
-		disp = np.insert(disp, -1, 0)
-		xy[np.abs(disp) > self.jumpmax, :] = np.ma.masked
-		return xy
-
-	def interpnans(self, xy):
-		for i in range(0,np.shape(xy)[-1],2):
-			missing = xy.mask.any(axis=-1)
-			ok = np.logical_not(missing)
-			ok_idx = np.ravel(np.nonzero(np.ravel(ok))[0])#gets the indices of ok poses
-			missing_idx = np.ravel(np.nonzero(np.ravel(missing))[0])#get the indices of missing poses
-			if len(missing_idx) > 0:
-				try:
-					good_data = np.ravel(xy.data[ok_idx,i])
-					good_data1 = np.ravel(xy.data[ok_idx,i+1])
-					xy.data[missing_idx,i] = np.interp(missing_idx,ok_idx,good_data)#,left=np.min(good_data),right=np.max(good_data)
-					xy.data[missing_idx,i+1] = np.interp(missing_idx,ok_idx,good_data1)
-				except ValueError:
-					pass
-		xy.mask = 0
-		print("{} bad/ jumpy positions were interpolated over".format(len(missing_idx)))#this is wrong i think
-		return xy
-
-	def __smooth(self, x, window_len=9, window='hanning'):
-		"""
-		Smooth the data using a window with requested size.
-		
-		This method is based on the convolution of a scaled window with the signal.
-		The signal is prepared by introducing reflected copies of the signal 
-		(with the window size) in both ends so that transient parts are minimized
-		in the begining and end part of the output signal.
-		
-		Parameters
-		----------
-		x : array_like
-			the input signal 
-		window_len : int
-			The length of the smoothing window
-		window : str
-			The type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
-			'flat' window will produce a moving average smoothing.
-
-		Returns
-		-------
-		out : The smoothed signal
-			
-		Example
-		-------
-		>>> t=linspace(-2,2,0.1)
-		>>> x=sin(t)+randn(len(t))*0.1
-		>>> y=smooth(x)
-		
-		See Also
-		--------
-		numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
-		scipy.signal.lfilter
-	
-		TODO: the window parameter could be the window itself if an array instead of a string   
-		"""
-
-		if type(x) == type([]):
-			x = np.array(x)
-
-		if x.ndim != 1:
-			raise ValueError("smooth only accepts 1 dimension arrays.")
-
-		if x.size < window_len:
-			raise ValueError("Input vector needs to be bigger than window size.")
-		if window_len < 3:
-			return x
-
-		if (window_len % 2) == 0:
-			window_len = window_len + 1
-
-		if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-			raise ValueError(
-				"Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
-
-		if window == 'flat':  # moving average
-			w = np.ones(window_len, 'd')
-		else:
-			w = eval('np.'+window+'(window_len)')
-		from astropy.convolution import convolve
-		y = convolve(x, w/w.sum(), normalize_kernel=False, boundary='extend')
-		# return the smoothed signal
-		return y
-
-	def smoothPos(self, xy):
-		"""
-		Smooths position data
-
-		Parameters
-		----------
-		xy : np.ma.MaskedArray
-			The xy data
-
-		Returns
-		-------
-		xy : array_like
-			The smoothed positional data
-		"""
-		# Extract boundaries of window used in recording
-
-		x = xy[:,0].astype(np.float64)
-		y = xy[:,1].astype(np.float64)
-
-		# TODO: calculate window_len from pos sampling rate
-		# 11 is roughly equal to 400ms at 30Hz (window_len needs to be odd)
-		sm_x = self.__smooth(x, window_len=11, window='flat')
-		sm_y = self.__smooth(y, window_len=11, window='flat')
-		return np.array([sm_x, sm_y])
-
-	def calcSpeed(self, xy):
-		"""
-		Calculates speed
-
-		Parameters
-		---------
-		xy : np.ma.MaskedArray
-			The xy positional data
-
-		Returns
-		-------
-		Nothing. Sets self.speed
-		"""
-		speed = np.sqrt(np.sum(np.power(np.diff(xy),2),0))
-		speed = np.append(speed, speed[-1])
-		if self.cm:
-			self.speed = speed * (100 * self.sample_rate / self.ppm) # in cm/s now
-		else:
-			self.speed = speed
-
-	def upsamplePos(self, xy, upsample_rate=50):
-		"""
-		Upsamples position data from 30 to upsample_rate
-
-		Parameters
-		---------
-		
-		xy : np.ma.MaskedArray
-			The xy positional data
-
-		upsample_rate : int
-			The rate to upsample to
-
-		Returns
-		-------
-		new_xy : np.ma.MaskedArray
-			The upsampled xy positional data
-
-		Notes
-		-----
-		This is mostly to get pos data recorded using PosTracker at 30Hz
-		into Axona format 50Hz data
-		"""
-		from scipy import signal
-		denom = np.gcd(upsample_rate, 30)
-		new_xy = signal.resample_poly(xy, upsample_rate/denom, 30/denom)
-		return new_xy
-
-class MapCalcsGeneric(object):
-	"""
-	Produces graphical output including but not limited to spatial
-	analysis of data.
-	
-	Parameters
-	----------
-	xy : array_like
-		The positional data usually as a 2D numpy array
-	hdir : array_like
-		The head direction data usually a 1D numpy array
-	pos_ts : array_like
-		1D array of timestamps in seconds
-	spk_ts : array_like
-		1D array of timestamps in seconds
-	plot_type : str or list
-		Determines the plots produced. Legal values:
-		['map','path','hdir','sac', 'speed']
-	
-	Notes
-	-----
-	Output possible: 
-	* ratemaps (xy)
-	* polar plots (heading direction)
-	* grid cell spatial autocorrelograms
-	* speed vs rate plots
-
-	It is possible to iterate through instances of this class as it has a yield
-	method defined
-	"""
-	def __init__(self, xy, hdir, speed, pos_ts, spk_ts, plot_type='map', **kwargs):
-		if (np.argmin(np.shape(xy)) == 1):
-			xy = xy.T
-		self.xy = xy
-		self.hdir = hdir
-		self.speed = speed
-		self.pos_ts = pos_ts
-		if (spk_ts.ndim == 2):
-			spk_ts = np.ravel(spk_ts)
-		self.spk_ts = spk_ts
-		if type(plot_type) is str:
-			self.plot_type = [plot_type]
-		else:
-			self.plot_type = list(plot_type)
-		self.spk_pos_idx = self.__interpSpkPosTimes()
-		self.__good_clusters = None
-		self.__spk_clusters = None
-		self.save_grid_output_location = None
-		if ( 'ppm' in kwargs.keys() ):
-			self.__ppm = kwargs['ppm']
-		else:
-			self.__ppm = 400
-		if 'pos_sample_rate' in kwargs.keys():
-			self.pos_sample_rate = kwargs['pos_sample_rate']
-		else:
-			self.pos_sample_rate = 30
-		if 'save_grid_summary_location' in kwargs.keys():
-			self.save_grid_output_location = kwargs['save_grid_summary_location']
-
-	@property
-	def good_clusters(self):
-		return self.__good_clusters
-
-	@good_clusters.setter
-	def good_clusters(self, value):
-		self.__good_clusters = value
-
-	@property
-	def spk_clusters(self):
-		return self.__spk_clusters
-
-	@spk_clusters.setter
-	def spk_clusters(self, value):
-		self.__spk_clusters = value
-
-	@property
-	def ppm(self):
-		return self.__ppm
-
-	@ppm.setter
-	def ppm(self, value):
-		self.__ppm = value
-
-	def __interpSpkPosTimes(self):
-		"""
-		Interpolates spike times into indices of position data
-		NB Assumes pos times have been zeroed correctly - see comments in
-		OEKiloPhy.OpenEphysNWB function __alignTimeStamps__()
-		"""
-		idx = np.searchsorted(self.pos_ts, self.spk_ts)
-		idx[idx==len(self.pos_ts)] = len(self.pos_ts) - 1
-		return idx
-
-	def makeSAC(self, rmap, cluster, ax=None):
-		nodwell = ~np.isfinite(rmap[0])
-		R = RateMap()
-		sac = R.autoCorr2D(rmap[0], nodwell)
-		if ax is not None:
-			pass
-			# TODO : do the plotting!
-
-	def makeRateMap(self, cluster, ax=None, **kwargs):
-		pos_w = np.ones_like(self.pos_ts)
-		mapMaker = RateMap(self.xy, None, None, pos_w, ppm=self.ppm)
-		spk_w = np.bincount(self.spk_pos_idx, self.spk_clusters==cluster, minlength=self.pos_ts.shape[0])
-		rmap = mapMaker.getMap(spk_w)
-		ratemap = np.ma.MaskedArray(rmap[0], np.isnan(rmap[0]), copy=True)
-		x, y = np.meshgrid(rmap[1][1][0:-1], rmap[1][0][0:-1][::-1])
-		vmax = np.max(np.ravel(ratemap))
-		
-		ax.pcolormesh(x, y, ratemap, cmap=jet, edgecolors='face', vmax=vmax)
-		ax.axis([x.min(), x.max(), y.min(), y.max()])
-		ax.set_aspect('equal')
-		plt.setp(ax.get_xticklabels(), visible=False)
-		plt.setp(ax.get_yticklabels(), visible=False)
-		ax.axes.get_xaxis().set_visible(False)
-		ax.axes.get_yaxis().set_visible(False)
-		ax.spines['right'].set_visible(False)
-		ax.spines['top'].set_visible(False)
-		ax.spines['bottom'].set_visible(False)
-		ax.spines['left'].set_visible(False)
-		return rmap
-
-	def makeSpikePathPlot(self, cluster, ax, **kwargs):
-		ax.plot(self.xy[0], self.xy[1])
-		ax.set_aspect('equal')
-		ax.invert_yaxis()
-		idx = self.spk_pos_idx[self.spk_clusters==cluster]
-		spk_colour = [0, 0, 0.7843]
-		ms = 1
-		if 'ms' in kwargs:
-			ms = kwargs['ms']
-		if 'markersize' in kwargs:
-			ms = kwargs['markersize']
-		ax.plot(self.xy[0,idx], self.xy[1,idx],'s',ms=ms, c=spk_colour,mec=spk_colour)
-		plt.setp(ax.get_xticklabels(), visible=False)
-		plt.setp(ax.get_yticklabels(), visible=False)
-		ax.axes.get_xaxis().set_visible(False)
-		ax.axes.get_yaxis().set_visible(False)
-		ax.spines['right'].set_visible(False)
-		ax.spines['top'].set_visible(False)
-		ax.spines['bottom'].set_visible(False)
-		ax.spines['left'].set_visible(False)
-
-	def makeHDPlot(self, cluster, ax, **kwargs):
-		pos_w = np.ones_like(self.pos_ts)
-		mapMaker = RateMap(self.xy, self.hdir, None, pos_w, ppm=self.ppm)
-		spk_w = np.bincount(self.spk_pos_idx, self.spk_clusters==cluster, minlength=self.pos_ts.shape[0])
-		rmap = mapMaker.getMap(spk_w, 'dir', 'rate')
-		if rmap[0].ndim == 1:
-			# polar plot
-			if ax is None:
-				fig = plt.figure()
-				ax = fig.add_subplot(111, projection='polar')
-			theta = np.deg2rad(rmap[1][0])
-			ax.clear()
-			r = rmap[0]
-			r = np.insert(r, -1, r[0])
-			ax.plot(theta, r)
-			if 'fill' in kwargs:
-				ax.fill(theta, r, alpha=0.5)
-			ax.set_aspect('equal')
-			ax.tick_params(axis='both', which='both', bottom=False, left=False, right=False, top=False, labelbottom=False, labelleft=False, labeltop=False, labelright=False)
-			ax.set_rticks([])
-
-from astropy import convolution # deals with nans unlike other convs
-
-# Suppress warnings generated from doing the ffts for the spatial autocorrelogram
-# see autoCorr2D and crossCorr2D
-import warnings
-warnings.filterwarnings("ignore", message="invalid value encountered in sqrt")
-warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
-warnings.filterwarnings("ignore", message="invalid value encountered in greater")
-warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
-
 class RateMap(object):
 	"""
 	Bins up positional data (xy, head direction etc) and produces rate maps
@@ -1087,3 +645,451 @@ class RateMap(object):
 		mapCovar = (rawCorr * N) - sums_a * sums_b
 
 		return np.squeeze(mapCovar / (mapStd_a * mapStd_b))
+
+class MapCalcsGeneric(object):
+	"""
+	Produces graphical output including but not limited to spatial
+	analysis of data.
+	
+	Parameters
+	----------
+	xy : array_like
+		The positional data usually as a 2D numpy array
+	hdir : array_like
+		The head direction data usually a 1D numpy array
+	pos_ts : array_like
+		1D array of timestamps in seconds
+	spk_ts : array_like
+		1D array of timestamps in seconds
+	plot_type : str or list
+		Determines the plots produced. Legal values:
+		['map','path','hdir','sac', 'speed']
+	
+	Notes
+	-----
+	Output possible: 
+	* ratemaps (xy)
+	* polar plots (heading direction)
+	* grid cell spatial autocorrelograms
+	* speed vs rate plots
+
+	It is possible to iterate through instances of this class as it has a yield
+	method defined
+	"""
+	def __init__(self, xy, hdir, speed, pos_ts, spk_ts, plot_type='map', **kwargs):
+		if (np.argmin(np.shape(xy)) == 1):
+			xy = xy.T
+		self.xy = xy
+		self.hdir = hdir
+		self.speed = speed
+		self.pos_ts = pos_ts
+		if (spk_ts.ndim == 2):
+			spk_ts = np.ravel(spk_ts)
+		self.spk_ts = spk_ts
+		if type(plot_type) is str:
+			self.plot_type = [plot_type]
+		else:
+			self.plot_type = list(plot_type)
+		self.spk_pos_idx = self.__interpSpkPosTimes()
+		self.__good_clusters = None
+		self.__spk_clusters = None
+		self.save_grid_output_location = None
+		if ( 'ppm' in kwargs.keys() ):
+			self.__ppm = kwargs['ppm']
+		else:
+			self.__ppm = 400
+		if 'pos_sample_rate' in kwargs.keys():
+			self.pos_sample_rate = kwargs['pos_sample_rate']
+		else:
+			self.pos_sample_rate = 30
+		if 'save_grid_summary_location' in kwargs.keys():
+			self.save_grid_output_location = kwargs['save_grid_summary_location']
+
+	@property
+	def good_clusters(self):
+		return self.__good_clusters
+
+	@good_clusters.setter
+	def good_clusters(self, value):
+		self.__good_clusters = value
+
+	@property
+	def spk_clusters(self):
+		return self.__spk_clusters
+
+	@spk_clusters.setter
+	def spk_clusters(self, value):
+		self.__spk_clusters = value
+
+	@property
+	def ppm(self):
+		return self.__ppm
+
+	@ppm.setter
+	def ppm(self, value):
+		self.__ppm = value
+
+	def __interpSpkPosTimes(self):
+		"""
+		Interpolates spike times into indices of position data
+		NB Assumes pos times have been zeroed correctly - see comments in
+		OEKiloPhy.OpenEphysNWB function __alignTimeStamps__()
+		"""
+		idx = np.searchsorted(self.pos_ts, self.spk_ts)
+		idx[idx==len(self.pos_ts)] = len(self.pos_ts) - 1
+		return idx
+
+	def makeSAC(self, rmap, cluster, ax=None):
+		nodwell = ~np.isfinite(rmap[0])
+		R = RateMap()
+		sac = R.autoCorr2D(rmap[0], nodwell)
+		if ax is not None:
+			pass
+			# TODO : do the plotting!
+
+	def makeRateMap(self, cluster, ax=None, **kwargs):
+		pos_w = np.ones_like(self.pos_ts)
+		mapMaker = RateMap(self.xy, None, None, pos_w, ppm=self.ppm)
+		spk_w = np.bincount(self.spk_pos_idx, self.spk_clusters==cluster, minlength=self.pos_ts.shape[0])
+		rmap = mapMaker.getMap(spk_w)
+		ratemap = np.ma.MaskedArray(rmap[0], np.isnan(rmap[0]), copy=True)
+		x, y = np.meshgrid(rmap[1][1][0:-1], rmap[1][0][0:-1][::-1])
+		vmax = np.max(np.ravel(ratemap))
+		
+		ax.pcolormesh(x, y, ratemap, cmap=jet, edgecolors='face', vmax=vmax)
+		ax.axis([x.min(), x.max(), y.min(), y.max()])
+		ax.set_aspect('equal')
+		plt.setp(ax.get_xticklabels(), visible=False)
+		plt.setp(ax.get_yticklabels(), visible=False)
+		ax.axes.get_xaxis().set_visible(False)
+		ax.axes.get_yaxis().set_visible(False)
+		ax.spines['right'].set_visible(False)
+		ax.spines['top'].set_visible(False)
+		ax.spines['bottom'].set_visible(False)
+		ax.spines['left'].set_visible(False)
+
+	def makeSpikePathPlot(self, cluster, ax, **kwargs):
+		ax.plot(self.xy[0], self.xy[1])
+		ax.set_aspect('equal')
+		ax.invert_yaxis()
+		idx = self.spk_pos_idx[self.spk_clusters==cluster]
+		spk_colour = [0, 0, 0.7843]
+		ms = 1
+		if 'ms' in kwargs:
+			ms = kwargs['ms']
+		if 'markersize' in kwargs:
+			ms = kwargs['markersize']
+		ax.plot(self.xy[0,idx], self.xy[1,idx],'s',ms=ms, c=spk_colour,mec=spk_colour)
+		plt.setp(ax.get_xticklabels(), visible=False)
+		plt.setp(ax.get_yticklabels(), visible=False)
+		ax.axes.get_xaxis().set_visible(False)
+		ax.axes.get_yaxis().set_visible(False)
+		ax.spines['right'].set_visible(False)
+		ax.spines['top'].set_visible(False)
+		ax.spines['bottom'].set_visible(False)
+		ax.spines['left'].set_visible(False)
+
+	def makeHDPlot(self, cluster, ax, **kwargs):
+		pos_w = np.ones_like(self.pos_ts)
+		mapMaker = RateMap(self.xy, self.hdir, None, pos_w, ppm=self.ppm)
+		spk_w = np.bincount(self.spk_pos_idx, self.spk_clusters==cluster, minlength=self.pos_ts.shape[0])
+		rmap = mapMaker.getMap(spk_w, 'dir', 'rate')
+		if rmap[0].ndim == 1:
+			# polar plot
+			if ax is None:
+				fig = plt.figure()
+				ax = fig.add_subplot(111, projection='polar')
+			theta = np.deg2rad(rmap[1][0])
+			ax.clear()
+			r = rmap[0]
+			r = np.insert(r, -1, r[0])
+			ax.plot(theta, r)
+			if 'fill' in kwargs:
+				ax.fill(theta, r, alpha=0.5)
+			ax.set_aspect('equal')
+			ax.tick_params(axis='both', which='both', bottom=False, left=False, right=False, top=False, labelbottom=False, labelleft=False, labeltop=False, labelright=False)
+			ax.set_rticks([])
+
+class PosCalcsGeneric(object):
+	"""
+	Generic class for post-processing of position data
+	Uses numpys masked arrays for dealing with bad positions, filtering etc
+
+	Parameters
+	----------
+	x, y : array_like
+		The x and y positions.
+	ppm : int
+		Pixels per metre
+	cm : boolean
+		Whether everything is converted into cms or not
+	jumpmax : int
+		Jumps in position (pixel coords) greater than this are bad
+
+	Notes
+	-----
+	The positional data (x,y) is turned into a numpy masked array once this
+	class is initialised - that mask is then modified through various
+	functions (postprocesspos being the main one).
+	"""
+	def __init__(self, x, y, ppm, cm=True, jumpmax=100):
+		assert np.shape(x) == np.shape(y)
+		self.xy = np.ma.MaskedArray([x, y])
+		self.dir = np.ma.MaskedArray(np.zeros_like(x))
+		self.speed = None
+		self.ppm = ppm
+		self.cm = cm
+		self.jumpmax = jumpmax
+		self.nleds = np.ndim(x)
+		self.npos = len(x)
+		self.tracker_params = None
+		self.sample_rate = None
+
+	def postprocesspos(self, tracker_params, **kwargs)->tuple:
+		"""
+		Post-process position data
+
+		Parameters
+		----------
+		tracker_params : dict
+			Same dict as created in OEKiloPhy.Settings.parsePos
+			(from module openephys2py)
+			Contains key / values describing the spatial extent of the pos data
+			keys = LeftBorder, RightBorder, TopBorder, BottomBorder and SampleRate
+
+		Returns
+		-------
+		xy, hdir : np.ma.MaskedArray
+			The post-processed position data
+
+		Notes
+		-----
+		Several internal functions are called here: speefilter, interpnans, smoothPos
+		and calcSpeed. Some internal state/ instance variables are set as well. The
+		mask of the positional data (an instance of numpy masked array) is modified
+		throughout this method.
+
+		"""
+		xy = self.xy
+		xy = np.ma.MaskedArray(xy, dtype=np.int32)
+		x_zero = xy[:, 0] < 0
+		y_zero = xy[:, 1] < 0
+		xy[np.logical_or(x_zero, y_zero), :] = np.ma.masked
+
+		self.tracker_params = tracker_params
+		if 'LeftBorder' in tracker_params.keys():
+			min_x = tracker_params['LeftBorder']
+		else:
+			min_x = np.min(xy[:,0])
+		xy[:, xy[0,:] <= min_x] = np.ma.masked
+		if 'TopBorder' in tracker_params.keys():
+			min_y = tracker_params['TopBorder'] # y origin at top
+		else:
+			min_y = np.min(xy[:,1])
+		xy[:, xy[1,:] <= min_y] = np.ma.masked
+		if 'RightBorder' in tracker_params.keys():
+			max_x = tracker_params['RightBorder']
+		else:
+			max_x = np.max(xy[:,0])
+		xy[:, xy[0,:] >= max_x] = np.ma.masked
+		if 'BottomBorder' in tracker_params.keys():
+			max_y = tracker_params['BottomBorder']
+		else:
+			max_y = np.max(xy[:,1])
+		xy[:, xy[1,:] >= max_y] = np.ma.masked
+		if 'SampleRate' in tracker_params.keys():
+			self.sample_rate = int(tracker_params['SampleRate'])
+		else:
+			self.sample_rate = 30
+
+		xy = xy.T
+		xy = self.speedfilter(xy)
+		xy = self.interpnans(xy) # ADJUST THIS SO NP.MASKED ARE INTERPOLATED OVER
+		xy = self.smoothPos(xy)
+		self.calcSpeed(xy)
+
+		import math
+		pos2 = np.arange(0, self.npos-1)
+		xy_f = xy.astype(np.float)
+		self.dir[pos2] = np.mod(((180/math.pi) * (np.arctan2(-xy_f[1, pos2+1] + xy_f[1,pos2],+xy_f[0,pos2+1]-xy_f[0,pos2]))), 360)
+		self.dir[-1] = self.dir[-2]
+
+		hdir = self.dir
+
+		return xy, hdir
+
+	def speedfilter(self, xy):
+		"""
+		Filters speed
+
+		Parameters
+		----------
+		xy : np.ma.MaskedArray
+			The xy data
+
+		Returns
+		-------
+		xy : np.ma.MaskedArray
+			The xy data with speeds > self.jumpmax masked
+		"""
+		
+		disp = np.hypot(xy[:,0], xy[:,1])
+		disp = np.diff(disp, axis=0)
+		disp = np.insert(disp, -1, 0)
+		xy[np.abs(disp) > self.jumpmax, :] = np.ma.masked
+		return xy
+
+	def interpnans(self, xy):
+		for i in range(0,np.shape(xy)[-1],2):
+			missing = xy.mask.any(axis=-1)
+			ok = np.logical_not(missing)
+			ok_idx = np.ravel(np.nonzero(np.ravel(ok))[0])#gets the indices of ok poses
+			missing_idx = np.ravel(np.nonzero(np.ravel(missing))[0])#get the indices of missing poses
+			if len(missing_idx) > 0:
+				try:
+					good_data = np.ravel(xy.data[ok_idx,i])
+					good_data1 = np.ravel(xy.data[ok_idx,i+1])
+					xy.data[missing_idx,i] = np.interp(missing_idx,ok_idx,good_data)#,left=np.min(good_data),right=np.max(good_data)
+					xy.data[missing_idx,i+1] = np.interp(missing_idx,ok_idx,good_data1)
+				except ValueError:
+					pass
+		xy.mask = 0
+		print("{} bad/ jumpy positions were interpolated over".format(len(missing_idx)))#this is wrong i think
+		return xy
+
+	def __smooth(self, x, window_len=9, window='hanning'):
+		"""
+		Smooth the data using a window with requested size.
+		
+		This method is based on the convolution of a scaled window with the signal.
+		The signal is prepared by introducing reflected copies of the signal 
+		(with the window size) in both ends so that transient parts are minimized
+		in the begining and end part of the output signal.
+		
+		Parameters
+		----------
+		x : array_like
+			the input signal 
+		window_len : int
+			The length of the smoothing window
+		window : str
+			The type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+			'flat' window will produce a moving average smoothing.
+
+		Returns
+		-------
+		out : The smoothed signal
+			
+		Example
+		-------
+		>>> t=linspace(-2,2,0.1)
+		>>> x=sin(t)+randn(len(t))*0.1
+		>>> y=smooth(x)
+		
+		See Also
+		--------
+		numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+		scipy.signal.lfilter
+	
+		TODO: the window parameter could be the window itself if an array instead of a string   
+		"""
+
+		if type(x) == type([]):
+			x = np.array(x)
+
+		if x.ndim != 1:
+			raise ValueError("smooth only accepts 1 dimension arrays.")
+
+		if x.size < window_len:
+			raise ValueError("Input vector needs to be bigger than window size.")
+		if window_len < 3:
+			return x
+
+		if (window_len % 2) == 0:
+			window_len = window_len + 1
+
+		if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+			raise ValueError(
+				"Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+
+		if window == 'flat':  # moving average
+			w = np.ones(window_len, 'd')
+		else:
+			w = eval('np.'+window+'(window_len)')
+		from astropy.convolution import convolve
+		y = convolve(x, w/w.sum(), normalize_kernel=False, boundary='extend')
+		# return the smoothed signal
+		return y
+
+	def smoothPos(self, xy):
+		"""
+		Smooths position data
+
+		Parameters
+		----------
+		xy : np.ma.MaskedArray
+			The xy data
+
+		Returns
+		-------
+		xy : array_like
+			The smoothed positional data
+		"""
+		# Extract boundaries of window used in recording
+
+		x = xy[:,0].astype(np.float64)
+		y = xy[:,1].astype(np.float64)
+
+		# TODO: calculate window_len from pos sampling rate
+		# 11 is roughly equal to 400ms at 30Hz (window_len needs to be odd)
+		sm_x = self.__smooth(x, window_len=11, window='flat')
+		sm_y = self.__smooth(y, window_len=11, window='flat')
+		return np.array([sm_x, sm_y])
+
+	def calcSpeed(self, xy):
+		"""
+		Calculates speed
+
+		Parameters
+		---------
+		xy : np.ma.MaskedArray
+			The xy positional data
+
+		Returns
+		-------
+		Nothing. Sets self.speed
+		"""
+		speed = np.sqrt(np.sum(np.power(np.diff(xy),2),0))
+		speed = np.append(speed, speed[-1])
+		if self.cm:
+			self.speed = speed * (100 * self.sample_rate / self.ppm) # in cm/s now
+		else:
+			self.speed = speed
+
+	def upsamplePos(self, xy, upsample_rate=50):
+		"""
+		Upsamples position data from 30 to upsample_rate
+
+		Parameters
+		---------
+		
+		xy : np.ma.MaskedArray
+			The xy positional data
+
+		upsample_rate : int
+			The rate to upsample to
+
+		Returns
+		-------
+		new_xy : np.ma.MaskedArray
+			The upsampled xy positional data
+
+		Notes
+		-----
+		This is mostly to get pos data recorded using PosTracker at 30Hz
+		into Axona format 50Hz data
+		"""
+		from scipy import signal
+		denom = np.gcd(upsample_rate, 30)
+		new_xy = signal.resample_poly(xy, upsample_rate/denom, 30/denom)
+		return new_xy
