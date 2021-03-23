@@ -6,6 +6,7 @@ from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 import numpy as np
 import matplotlib.pylab as plt
+from matplotlib.cm import jet
 
 class SpatialRateMap(ManualClusteringView):
 	plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
@@ -19,6 +20,7 @@ class SpatialRateMap(ManualClusteringView):
 		assert os.path.exists(os.path.join(os.getcwd(), 'xy.npy'))
 		import numpy as np
 		self.xy = np.load(os.path.join(os.getcwd(), 'xy.npy'))
+		xyts = self.xy[:,2] / 3e4
 		xy_lower = np.min(self.xy, 0)
 		xy_upper = np.max(self.xy, 0)
 		self.xlims = [xy_lower[0], xy_upper[0]]
@@ -30,12 +32,14 @@ class SpatialRateMap(ManualClusteringView):
 		# If the spatial extent of xy data is provided in the xy file specify here
 		# otherwise the the range of the xy data is used
 		xy, hdir = posProcessor.postprocesspos(dict())
-		xyts = xy[:,2] / 3e4
 		spk_times = np.squeeze(np.load(os.path.join(os.getcwd(), 'spike_times.npy')))
+		spk_times = spk_times / 3e4
 		self.RateMapMaker = MapCalcsGeneric(xy, np.squeeze(hdir), posProcessor.speed, xyts, spk_times, 'map')
 		self.RateMapMaker.good_clusters = None
-		self.RateMapMaker.spk_clusters = None
-	 
+		if os.path.exists('spike_clusters.npy'):
+			self.RateMapMaker.spk_clusters = np.load('spike_clusters.npy')
+		else:
+			self.RateMapMaker.spk_clusters = None
 
 	def on_select(self, cluster_ids=(), **kwargs):
 		self.cluster_ids = cluster_ids
@@ -43,25 +47,25 @@ class SpatialRateMap(ManualClusteringView):
 		if not cluster_ids:
 			return
 		
-			
-		# rmap = self.RateMapMaker.makeRateMap(cluster_ids[0])
-		# ratemap = np.ma.MaskedArray(rmap[0], np.isnan(rmap[0]), copy=True)
-		# x, y = np.meshgrid(rmap[1][1][0:-1], rmap[1][0][0:-1][::-1])
-		# vmax = np.max(np.ravel(ratemap))
-		# self.canvas.ax.pcolormesh(x, y, ratemap, edgecolors='face', vmax=vmax)
-		# self.canvas.ax.axis([x.min(), x.max(), y.min(), y.max()])
-		# self.canvas.ax.set_aspect('equal')
-
-
-		# We draw a 2D histogram with matplotlib.
-		# The objects are:
-		# - self.figure, a Figure instance
-		# - self.canvas, a PlotCanvasMpl instance
-		# - self.canvas.ax, an Axes object.
-		# self.canvas.ax.hist2d(x, y, 50)
+		self.RateMapMaker.makeRateMap(cluster_ids[0], ax=self.canvas.ax)
 
 		# Use this to update the matplotlib figure.
 		self.canvas.update()
+
+	def attach(self, gui):
+		"""Attach the view to the GUI.
+		Perform the following:
+		- Add the view to the GUI.
+		- Update the view's attribute from the GUI state
+		- Add the default view actions (auto_update, screenshot)
+		- Bind the on_select() method to the select event raised by the supervisor.
+		"""
+		super(SpatialRateMap, self).attach(gui)
+
+		self.actions.add(callback=self.emptyCallBack, name="MyMenu", menu="Test", view=self, show_shortcut=False)
+
+	def emptyCallBack(self):
+		print("YO")
 
 
 class SpatialRateMapPlugin(IPlugin):
@@ -69,9 +73,10 @@ class SpatialRateMapPlugin(IPlugin):
 		def create_feature_density_view():
 			"""A function that creates and returns a view."""
 			return SpatialRateMap(features=controller._get_features)
-
-
 		controller.view_creator['SpatialRateMap'] = create_feature_density_view
+	
+		
+
 
 class PosCalcsGeneric(object):
 	"""
@@ -275,8 +280,6 @@ class PosCalcsGeneric(object):
 			raise ValueError(
 				"Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
 
-		s = np.r_[2*x[0]-x[window_len:1:-1], x, 2*x[-1]-x[-1:-window_len:-1]]
-
 		if window == 'flat':  # moving average
 			w = np.ones(window_len, 'd')
 		else:
@@ -464,13 +467,11 @@ class MapCalcsGeneric(object):
 		pos_w = np.ones_like(self.pos_ts)
 		mapMaker = RateMap(self.xy, None, None, pos_w, ppm=self.ppm)
 		spk_w = np.bincount(self.spk_pos_idx, self.spk_clusters==cluster, minlength=self.pos_ts.shape[0])
-		# print("nSpikes: {}".format(np.sum(spk_w).astype(int)))
 		rmap = mapMaker.getMap(spk_w)
-		if ax is None:
-			return rmap
 		ratemap = np.ma.MaskedArray(rmap[0], np.isnan(rmap[0]), copy=True)
 		x, y = np.meshgrid(rmap[1][1][0:-1], rmap[1][0][0:-1][::-1])
 		vmax = np.max(np.ravel(ratemap))
+		
 		ax.pcolormesh(x, y, ratemap, cmap=jet, edgecolors='face', vmax=vmax)
 		ax.axis([x.min(), x.max(), y.min(), y.max()])
 		ax.set_aspect('equal')
