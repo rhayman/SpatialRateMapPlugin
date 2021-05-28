@@ -3,8 +3,7 @@ from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 from phy.apps import capture_exceptions
 import numpy as np
-import matplotlib.pylab as plt
-from matplotlib.cm import jet
+import os
 from astropy.convolution import convolve # deals with nans unlike other convs
 from ephysiopy.common.ephys_generic import PosCalcsGeneric
 from ephysiopy.visualise.plotting import FigureMaker
@@ -25,10 +24,8 @@ class SpatialRateMap(ManualClusteringView):
         """features is a function (cluster_id => Bunch(spike_times, ...)) where data is a 3D array."""
         super(SpatialRateMap, self).__init__()
         self.features = features
-        import os
         # do this for now - maybe give loading option in future
         assert os.path.exists(os.path.join(os.getcwd(), 'xy.npy'))
-        import numpy as np
         self.xy = np.load(os.path.join(os.getcwd(), 'xy.npy'))
         xyts = self.xy[:,2] / 3e4
         xy_lower = np.min(self.xy, 0)
