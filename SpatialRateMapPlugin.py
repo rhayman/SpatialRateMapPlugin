@@ -4,7 +4,9 @@ from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 from phy.apps import capture_exceptions
 import numpy as np
 import os
+from pathlib import Path
 from astropy.convolution import convolve # deals with nans unlike other convs
+from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
 from ephysiopy.common.ephys_generic import PosCalcsGeneric
 from ephysiopy.visualise.plotting import FigureMaker
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
@@ -25,36 +27,39 @@ class SpatialRateMap(ManualClusteringView):
         super(SpatialRateMap, self).__init__()
         self.features = features
         # do this for now - maybe give loading option in future
-        assert os.path.exists(os.path.join(os.getcwd(), 'xy.npy'))
-        self.xy = np.load(os.path.join(os.getcwd(), 'xy.npy'))
-        xyts = self.xy[:,2] / 3e4
+        this_folder = os.getcwd()
+        path_to_top_folder = Path(this_folder).parents[3]
+        path2PosData = Path(this_folder).joinpath('pos_data')
+        npx = OpenEphysNPX(path_to_top_folder)
+        npx.path2PosData = path2PosData
+        npx.load()
+        npx.loadKilo()
+        self.xy = npx.xy
+        xyts = npx.xyTS
         xy_lower = np.min(self.xy, 0)
         xy_upper = np.max(self.xy, 0)
         self.xlims = [xy_lower[0], xy_upper[0]]
         self.ylims = [xy_lower[1], xy_upper[1]]
-        self.pixels_per_metre = 400
-        self.jumpmax = 100
-        # Need to do some pre-processing of position data before all this...
-        posProcessor = PosCalcsGeneric(self.xy[:,0], self.xy[:,1], self.pixels_per_metre, jumpmax=self.jumpmax)
+        self.pixels_per_metre = npx.ppm
+        self.jumpmax = npx.jumpmax
         # If the spatial extent of xy data is provided in the xy file specify here
         # otherwise the the range of the xy data is used
-        xy, hdir = posProcessor.postprocesspos(dict())
-        setattr(self, 'dir', hdir)
-        setattr(self, 'speed', posProcessor.speed)
+        setattr(self, 'dir', npx.dir)
+        setattr(self, 'speed', npx.speed)
         setattr(self, 'ppm', self.pixels_per_metre)
         setattr(self, 'xyTS', xyts)
         setattr(self, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
-        spk_times = np.squeeze(np.load(os.path.join(os.getcwd(), 'spike_times.npy')))
+        
+        spk_times = npx.kilodata.spk_times # in samples
         spk_times = spk_times / 3e4
         setattr(self, 'spk_times', spk_times)
-        clusters = np.load(os.path.join(os.getcwd(), 'spike_clusters.npy'))
-        setattr(self, 'clusters', clusters)
+        setattr(self, 'clusters', npx.kilodata.spk_clusters)
         # start out with 2D ratemaps as the default plot type
         self.plot_type = "ratemap"
         F = FigureMaker()
-        setattr(F, 'xy', xy)
-        setattr(F, 'dir', hdir)
-        setattr(F, 'speed', posProcessor.speed)
+        setattr(F, 'xy', self.xy)
+        setattr(F, 'dir', self.dir)
+        setattr(F, 'speed', self.speed)
         setattr(F, 'xyTS', xyts)
         setattr(F, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
         setattr(self, 'FigureMaker', F)
