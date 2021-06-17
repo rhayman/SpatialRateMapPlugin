@@ -30,6 +30,8 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[3]
         path2PosData = Path(this_folder).joinpath('pos_data')
+        if not os.path.exists(path2PosData):
+            return
         npx = OpenEphysNPX(path_to_top_folder)
         npx.path2PosData = path2PosData
         npx.load()
@@ -51,7 +53,7 @@ class SpatialRateMap(ManualClusteringView):
         setattr(self, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
         
         spk_times = npx.kilodata.spk_times # in samples
-        spk_times = spk_times / 3e4
+        spk_times = spk_times# / 3e4
         setattr(self, 'spk_times', spk_times)
         setattr(self, 'clusters', npx.kilodata.spk_clusters)
         # start out with 2D ratemaps as the default plot type
@@ -103,7 +105,8 @@ class SpatialRateMap(ManualClusteringView):
     def plotHeadDirection(self):
         self.canvas.ax.clear()
         spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
-        self.FigureMaker.makeHDPlot(spk_times, self.canvas.ax)
+        self.FigureMaker.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
+        self.canvas.ax.set_aspect(10)
         self.plot_type = "head_direction"
         self.canvas.update()
 
