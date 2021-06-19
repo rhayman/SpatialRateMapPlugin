@@ -65,6 +65,7 @@ class SpatialRateMap(ManualClusteringView):
         setattr(F, 'xyTS', xyts)
         setattr(F, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
         setattr(self, 'FigureMaker', F)
+        setattr(self, 'npx', npx)
 
     def on_select(self, cluster_ids=(), **kwargs):
         self.cluster_ids = cluster_ids
@@ -77,6 +78,8 @@ class SpatialRateMap(ManualClusteringView):
             self.plotHeadDirection()
         elif 'spikes_on_path' in self.plot_type:
             self.plotSpikesOnPath()
+        elif 'SAC' in self.plot_type:
+            self.plotSAC()
 
         # Use this to update the matplotlib figure.
         self.canvas.update()
@@ -94,6 +97,8 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.plotRateMap, name="ratemap", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotHeadDirection, name="head_direction", menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
+        self.actions.add(self.setPPM, prompt=True, prompt_default=lambda: self.pixels_per_metre)
 
     def plotSpikesOnPath(self):
         self.canvas.ax.clear()
@@ -117,10 +122,30 @@ class SpatialRateMap(ManualClusteringView):
         self.plot_type = "ratemap"
         self.canvas.update()
 
+    def plotSAC(self):
+        self.canvas.ax.clear()
+        spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
+        self.FigureMaker.makeSAC(spk_times, self.canvas.ax)
+        self.plot_type = "SAC"
+        self.canvas.update()
+    
+    def setPPM(self, ppm):
+        setattr(self, 'pixels_per_metre', ppm)
+        setattr(self.FigureMaker, 'ppm', ppm)
+        if 'ratemap' in self.plot_type:
+            self.plotRateMap()
+        elif 'head_direction' in self.plot_type:
+            self.plotHeadDirection()
+        elif 'spikes_on_path' in self.plot_type:
+            self.plotSpikesOnPath()
+        elif 'SAC' in self.plot_type:
+            self.plotSAC()
+
+
 
 class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
-        def create_feature_density_view():
+        def create_ratemap_view():
             """A function that creates and returns a view."""
             return SpatialRateMap(features=controller._get_features)
-        controller.view_creator['SpatialRateMap'] = create_feature_density_view
+        controller.view_creator['SpatialRateMap'] = create_ratemap_view
