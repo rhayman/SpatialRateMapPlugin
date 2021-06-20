@@ -72,14 +72,7 @@ class SpatialRateMap(ManualClusteringView):
         # We don't display anything if no clusters are selected.
         if not cluster_ids:
             return
-        if 'ratemap' in self.plot_type:
-            self.plotRateMap()
-        elif 'head_direction' in self.plot_type:
-            self.plotHeadDirection()
-        elif 'spikes_on_path' in self.plot_type:
-            self.plotSpikesOnPath()
-        elif 'SAC' in self.plot_type:
-            self.plotSAC()
+        self.plot()
 
         # Use this to update the matplotlib figure.
         self.canvas.update()
@@ -99,6 +92,7 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.plotHeadDirection, name="head_direction", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
         self.actions.add(self.setPPM, prompt=True, prompt_default=lambda: self.pixels_per_metre)
+        self.actions.add(self.setCmsPerBin, prompt=True, prompt_default=lambda: self.pixels_per_metre)
 
     def plotSpikesOnPath(self):
         self.canvas.ax.clear()
@@ -132,6 +126,13 @@ class SpatialRateMap(ManualClusteringView):
     def setPPM(self, ppm):
         setattr(self, 'pixels_per_metre', ppm)
         setattr(self.FigureMaker, 'ppm', ppm)
+        self.plot()
+
+    def setCmsPerBin(self, cms_per_bin):
+        setattr(self, 'cmsPerBin', cms_per_bin)
+        setattr(self.FigureMaker, 'cmsPerBin', cms_per_bin)
+
+    def plot(self):
         if 'ratemap' in self.plot_type:
             self.plotRateMap()
         elif 'head_direction' in self.plot_type:
@@ -140,8 +141,6 @@ class SpatialRateMap(ManualClusteringView):
             self.plotSpikesOnPath()
         elif 'SAC' in self.plot_type:
             self.plotSAC()
-
-
 
 class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
