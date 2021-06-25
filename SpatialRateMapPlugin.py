@@ -2,13 +2,12 @@ from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 from phy.apps import capture_exceptions
+from phy.utils import selected_cluster_color
 import numpy as np
 import os
 from pathlib import Path
 from astropy.convolution import convolve # deals with nans unlike other convs
 from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
-from ephysiopy.common.ephys_generic import PosCalcsGeneric
-from ephysiopy.visualise.plotting import FigureMaker
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
 import warnings
@@ -33,39 +32,14 @@ class SpatialRateMap(ManualClusteringView):
         if not os.path.exists(path2PosData):
             return
         npx = OpenEphysNPX(path_to_top_folder)
-        npx.path2PosData = path2PosData
+        setattr(npx, 'ppm', 400)
+        setattr(npx, 'cmsPerBin', 3)
         npx.load()
-        npx.loadKilo()
-        self.xy = npx.xy
-        xyts = npx.xyTS
-        xy_lower = np.min(self.xy, 0)
-        xy_upper = np.max(self.xy, 0)
-        self.xlims = [xy_lower[0], xy_upper[0]]
-        self.ylims = [xy_lower[1], xy_upper[1]]
-        self.pixels_per_metre = npx.ppm
-        self.jumpmax = npx.jumpmax
-        # If the spatial extent of xy data is provided in the xy file specify here
-        # otherwise the the range of the xy data is used
-        setattr(self, 'dir', npx.dir)
-        setattr(self, 'speed', npx.speed)
-        setattr(self, 'ppm', self.pixels_per_metre)
-        setattr(self, 'xyTS', xyts)
-        setattr(self, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
-        
-        spk_times = npx.kilodata.spk_times # in samples
-        spk_times = spk_times# / 3e4
-        setattr(self, 'spk_times', spk_times)
-        setattr(self, 'clusters', npx.kilodata.spk_clusters)
-        # start out with 2D ratemaps as the default plot type
+        setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         self.plot_type = "ratemap"
-        F = FigureMaker()
-        setattr(F, 'xy', self.xy)
-        setattr(F, 'dir', self.dir)
-        setattr(F, 'speed', self.speed)
-        setattr(F, 'xyTS', xyts)
-        setattr(F, 'pos_sample_rate', 1.0/np.mean(np.diff(xyts)))
-        setattr(self, 'FigureMaker', F)
         setattr(self, 'npx', npx)
+
+        self.overlay_spikes = False
 
     def on_select(self, cluster_ids=(), **kwargs):
         self.cluster_ids = cluster_ids
@@ -96,42 +70,15 @@ class SpatialRateMap(ManualClusteringView):
 
         self.actions.add(callback=self.plotRateMap, name="ratemap", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path", menu="Test", view=self, show_shortcut=False)
-        self.actions.add(callback=self.plotHeadDirection, name="head_direction", menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotHeadDirection, name="Head direction(x) by speed(y)", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
-        self.actions.add(self.setPPM, prompt=True, prompt_default=lambda: self.pixels_per_metre)
+        self.actions.separator()
+        self.actions.add(callback=self.setPPM, name='Set pixels per metre', prompt=True, prompt_default=lambda: self.npx.ppm)
+        self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
+        self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
+        self.actions.add(callback=self.speedFilter, name='Filter speed', prompt=True, n_args=2)
 
-    def plotSpikesOnPath(self):
-        self.canvas.ax.clear()
-        spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
-        self.FigureMaker.makeSpikePathPlot(spk_times, self.canvas.ax, markersize=3)
-        self.plot_type = "spikes_on_path"
-        self.canvas.update()
-
-    def plotHeadDirection(self):
-        self.canvas.ax.clear()
-        spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
-        self.FigureMaker.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
-        self.canvas.ax.set_aspect(10)
-        self.plot_type = "head_direction"
-        self.canvas.update()
-
-    def plotRateMap(self):
-        self.canvas.ax.clear()
-        spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
-        self.FigureMaker.makeRateMap(spk_times, self.canvas.ax)
-        self.plot_type = "ratemap"
-        self.canvas.update()
-
-    def plotSAC(self):
-        self.canvas.ax.clear()
-        spk_times = self.spk_times[self.clusters == self.cluster_ids[0]]
-        self.FigureMaker.makeSAC(spk_times, self.canvas.ax)
-        self.plot_type = "SAC"
-        self.canvas.update()
-    
-    def setPPM(self, ppm):
-        setattr(self, 'pixels_per_metre', ppm)
-        setattr(self.FigureMaker, 'ppm', ppm)
+    def replot(self):
         if 'ratemap' in self.plot_type:
             self.plotRateMap()
         elif 'head_direction' in self.plot_type:
@@ -141,11 +88,69 @@ class SpatialRateMap(ManualClusteringView):
         elif 'SAC' in self.plot_type:
             self.plotSAC()
 
+    def get_spike_times(self, id):
+        b = self.features(id, load_all=True)
+        return np.array(b.data * 3e4).astype(int)
+
+    def setCmsPerBin(self, cms_per_bin):
+        self.npx.cmsPerBin = cms_per_bin
+        self.replot()
+
+    def setPPM(self, ppm):
+        self.npx.ppm = ppm
+        self.replot()
+    
+    def overlaySpikes(self, checked):
+        if checked:
+            self.overlay_spikes = True
+        else:
+            self.overlay_spikes = False
+
+    def speedFilter(self, _min, _max):
+        d = {'speed': [_min, _max]}
+        self.npx.filterPosition(d)
+        self.replot()
+
+    def plotSpikesOnPath(self):
+        self.canvas.ax.clear()
+        if self.overlay_spikes:
+            clusters = self.cluster_ids
+        else:
+            clusters = [self.cluster_ids[0]]
+        for idx, cluster in enumerate(clusters):
+            spk_times = self.get_spike_times(cluster)
+            col = selected_cluster_color(idx)[0:3]
+            self.npx.makeSpikePathPlot(
+                spk_times, ax=self.canvas.ax, markersize=3, c=col)
+        self.plot_type = "spikes_on_path"
+        self.canvas.update()
+
+    def plotHeadDirection(self):
+        self.canvas.ax.clear()
+        spk_times = self.get_spike_times(self.cluster_ids[0])
+        self.npx.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
+        self.canvas.ax.set_aspect(10)
+        self.plot_type = "head_direction"
+        self.canvas.update()
+
+    def plotRateMap(self):
+        spk_times = self.get_spike_times(self.cluster_ids[0])
+        self.canvas.ax.clear()
+        self.npx.makeRateMap(spk_times, self.canvas.ax)
+        self.plot_type = "ratemap"
+        self.canvas.update()
+
+    def plotSAC(self):
+        self.canvas.ax.clear()
+        spk_times = self.get_spike_times(self.cluster_ids[0])
+        self.npx.makeSAC(spk_times, self.canvas.ax)
+        self.plot_type = "SAC"
+        self.canvas.update()
 
 
 class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
         def create_ratemap_view():
             """A function that creates and returns a view."""
-            return SpatialRateMap(features=controller._get_features)
+            return SpatialRateMap(features=controller._get_feature_view_spike_times)
         controller.view_creator['SpatialRateMap'] = create_ratemap_view
