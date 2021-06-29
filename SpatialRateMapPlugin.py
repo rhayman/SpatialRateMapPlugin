@@ -1,12 +1,11 @@
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
-from phy.apps import capture_exceptions
+# from phy.apps import capture_exceptions
 from phy.utils import selected_cluster_color
 import numpy as np
 import os
 from pathlib import Path
-from astropy.convolution import convolve # deals with nans unlike other convs
 from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
@@ -16,7 +15,7 @@ warnings.filterwarnings("ignore", message="invalid value encountered in subtract
 warnings.filterwarnings("ignore", message="invalid value encountered in greater")
 warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
 
-capture_exceptions()
+# capture_exceptions()
 
 class SpatialRateMap(ManualClusteringView):
     plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
@@ -37,6 +36,10 @@ class SpatialRateMap(ManualClusteringView):
         npx.load()
         setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         self.plot_type = "ratemap"
+        x_lims = (np.nanmin(npx.xy[0]), np.nanmax(npx.xy[0]))
+        y_lims = (np.nanmin(npx.xy[1]), np.nanmax(npx.xy[1]))
+        setattr(npx, 'x_lims', x_lims)
+        setattr(npx, 'y_lims', y_lims)
         setattr(self, 'npx', npx)
 
         self.overlay_spikes = False
@@ -46,7 +49,7 @@ class SpatialRateMap(ManualClusteringView):
         # We don't display anything if no clusters are selected.
         if not cluster_ids:
             return
-        self.plot()
+        self.replot()
 
         # Use this to update the matplotlib figure.
         self.canvas.update()
@@ -61,15 +64,16 @@ class SpatialRateMap(ManualClusteringView):
         """
         super(SpatialRateMap, self).attach(gui)
 
-        self.actions.add(callback=self.plotRateMap, name="ratemap", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path", menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotRateMap, name="ratemap", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotHeadDirection, name="Head direction(x) by speed(y)", menu="Test", view=self, show_shortcut=False)
         self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
         self.actions.separator()
         self.actions.add(callback=self.setPPM, name='Set pixels per metre', prompt=True, prompt_default=lambda: self.npx.ppm)
         self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
+        self.actions.add(callback=self.speedFilter, name='Filter speed (min max) cm/s', prompt=True, n_args=2)
+        self.actions.add(callback=self.directionFilter, name='Filter direction ("w", "e", "n" or "s")', prompt=True, n_args=1)
         self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
-        self.actions.add(callback=self.speedFilter, name='Filter speed', prompt=True, n_args=2)
 
     def replot(self):
         if 'ratemap' in self.plot_type:
@@ -101,6 +105,11 @@ class SpatialRateMap(ManualClusteringView):
 
     def speedFilter(self, _min, _max):
         d = {'speed': [_min, _max]}
+        self.npx.filterPosition(d)
+        self.replot()
+
+    def directionFilter(self, dir2filt):
+        d = {'dir': dir2filt}
         self.npx.filterPosition(d)
         self.replot()
 
