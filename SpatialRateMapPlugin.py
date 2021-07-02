@@ -85,30 +85,29 @@ class SpatialRateMap(ManualClusteringView):
         elif 'SAC' in self.plot_type:
             self.plotSAC()
 
-    def get_spike_times(self, id):
+    def get_spike_times(self, id: int):
         b = self.features(id, load_all=True)
         return np.array(b.data * 3e4).astype(int)
 
-    def setCmsPerBin(self, cms_per_bin):
+    def setCmsPerBin(self, cms_per_bin: int):
         self.npx.cmsPerBin = cms_per_bin
         self.replot()
 
-    def setPPM(self, ppm):
+    def setPPM(self, ppm: int):
         self.npx.ppm = ppm
+        self.npx.x_lims = None
+        self.npx.y_lims = None
         self.replot()
     
-    def overlaySpikes(self, checked):
-        if checked:
-            self.overlay_spikes = True
-        else:
-            self.overlay_spikes = False
+    def overlaySpikes(self, checked: bool):
+        self.overlay_spikes = checked
 
-    def speedFilter(self, _min, _max):
+    def speedFilter(self, _min: int, _max: int):
         d = {'speed': [_min, _max]}
         self.npx.filterPosition(d)
         self.replot()
 
-    def directionFilter(self, dir2filt):
+    def directionFilter(self, dir2filt: str):
         d = {'dir': dir2filt}
         self.npx.filterPosition(d)
         self.replot()
@@ -124,8 +123,9 @@ class SpatialRateMap(ManualClusteringView):
             col = selected_cluster_color(idx)[0:3]
             self.npx.makeSpikePathPlot(
                 spk_times, ax=self.canvas.ax, markersize=3, c=col)
+            self.canvas.update()
         self.plot_type = "spikes_on_path"
-        self.canvas.update()
+        
 
     def plotHeadDirection(self):
         self.canvas.ax.clear()
