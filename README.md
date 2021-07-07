@@ -10,6 +10,14 @@ Assumes that data has been processed using KiloSort (https://github.com/MouseLan
 
 Installation
 ============
+First of all install a Python packge available on PyPi called ephysiopy.
+
+Activate the conda environment as you would if starting up phy and then do this:
+
+```python
+python3 -m pip install ephysiopy -U
+```
+
 git clone or download the SpatialRateMapPlugin.py file and save in the folder usually located in $HOME/.phy/plugins/
 
 You also need to add a line to $HOME/.phy/phy_config.py which looks like:
