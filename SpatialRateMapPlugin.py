@@ -29,6 +29,7 @@ class SpatialRateMap(ManualClusteringView):
         # do this for now - maybe give loading option in future
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[3]
+        logger.debug("Great-great grandparent folder is: '%s'", path_to_top_folder)
         path2PosData = Path(this_folder).joinpath('pos_data')
         logger.debug("Path to position data: '%s'", path2PosData)
         if not os.path.exists(path2PosData):
