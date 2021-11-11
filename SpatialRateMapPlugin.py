@@ -78,8 +78,7 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.timeFilter, name='Filter times(s) (start -> stop)', prompt=True, n_args=2)
         self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
 
-    def replot(self):
-        plot2do = getattr(self, 'plot_type')
+    def replot(self, plot2do='ratemap'):
         if 'ratemap' in plot2do:
             self.plotRateMap()
         elif 'head_direction' in plot2do:
