@@ -15,7 +15,9 @@ warnings.filterwarnings("ignore", message="invalid value encountered in subtract
 warnings.filterwarnings("ignore", message="invalid value encountered in greater")
 warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
 
-# capture_exceptions()
+import logging
+logger = logging.getLogger("phy")
+
 
 class SpatialRateMap(ManualClusteringView):
     plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
@@ -28,6 +30,7 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[3]
         path2PosData = Path(this_folder).joinpath('pos_data')
+        logger.debug("Path to position data: '%s'", path2PosData)
         if not os.path.exists(path2PosData):
             return
         npx = OpenEphysNPX(path_to_top_folder)
@@ -41,7 +44,6 @@ class SpatialRateMap(ManualClusteringView):
         setattr(npx, 'x_lims', x_lims)
         setattr(npx, 'y_lims', y_lims)
         setattr(self, 'npx', npx)
-
         self.overlay_spikes = False
 
     def on_select(self, cluster_ids=(), **kwargs):
@@ -73,6 +75,7 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
         self.actions.add(callback=self.speedFilter, name='Filter speed (min max) cm/s', prompt=True, n_args=2)
         self.actions.add(callback=self.directionFilter, name='Filter direction ("w", "e", "n" or "s")', prompt=True, n_args=1)
+        self.actions.add(callback=self.timeFilter, name='Filter times(s) (start -> stop)', prompt=True, n_args=2)
         self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
 
     def replot(self):
@@ -103,14 +106,24 @@ class SpatialRateMap(ManualClusteringView):
         self.overlay_spikes = checked
 
     def speedFilter(self, _min: int, _max: int):
-        d = {'speed': [_min, _max]}
+        if not _min or not _max:
+            d = None
+        else:
+            d = {'speed': [_min, _max]}
         self.npx.filterPosition(d)
         self.replot()
 
     def directionFilter(self, dir2filt: str):
-        d = {'dir': dir2filt}
+        if not dir2filt:
+            d = None
+        else:
+            d = {'dir': dir2filt}
         self.npx.filterPosition(d)
         self.replot()
+
+    def timeFilter(self, start: int, stop: int):
+        d = {'time' : (start, stop)}
+        self.npx.filterPosition(d)
 
     def plotSpikesOnPath(self):
         self.canvas.ax.clear()
@@ -130,6 +143,7 @@ class SpatialRateMap(ManualClusteringView):
     def plotHeadDirection(self):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
+        print(f"npx speed masked: {np.ma.is_masked(self.npx.speed)}")
         self.npx.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
         self.canvas.ax.set_aspect(10)
         self.plot_type = "head_direction"
@@ -146,6 +160,30 @@ class SpatialRateMap(ManualClusteringView):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
         self.npx.makeSAC(spk_times, self.canvas.ax)
+        # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
+        self.npx.initialise()
+        spk_times_in_pos_samples = self.npx.getSpikePosIndices(spk_times)
+        spk_weights = np.bincount(
+            spk_times_in_pos_samples, minlength=self.npx.npos)
+        rmap = self.npx.RateMapMaker.getMap(spk_weights)
+        from ephysiopy.common import gridcell
+        S = gridcell.SAC()
+        nodwell = ~np.isfinite(rmap[0])
+        sac = S.autoCorr2D(rmap[0], nodwell)
+        measures = S.getMeasures(sac)
+        gs = measures['gridscore']
+        if ~np.isnan(gs):
+            gs = str(gs)[0:5]
+        else:
+            gs = 'NaN'
+        self.canvas.ax.text(
+            0.95, 0.05, 
+            gs,
+            c='w', fontsize=12,
+            ha='center', va='top',
+            transform=self.canvas.ax.transAxes
+        )
+         # ----------- END TEXT ANNOTATION DEBUG ----------
         self.plot_type = "SAC"
         self.canvas.update()
 
