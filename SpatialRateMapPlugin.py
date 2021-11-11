@@ -30,13 +30,10 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
         logger.debug("Great-great grandparent folder is: '%s'", path_to_top_folder)
-        path2PosData = Path(this_folder).joinpath('pos_data')
-        logger.debug("Path to position data: '%s'", path2PosData)
-        if not os.path.exists(path2PosData):
-            return
         npx = OpenEphysNPX(path_to_top_folder)
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
+        setattr(npx, 'nchannels', 32)
         npx.load()
         setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         setattr(self, 'plot_type', 'ratemap')
