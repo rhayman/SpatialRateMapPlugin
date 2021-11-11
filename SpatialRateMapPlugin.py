@@ -38,7 +38,7 @@ class SpatialRateMap(ManualClusteringView):
         setattr(npx, 'cmsPerBin', 3)
         npx.load()
         setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
-        self.plot_type = "ratemap"
+        setattr(self, 'plot_type', 'ratemap')
         x_lims = (np.nanmin(npx.xy[0]), np.nanmax(npx.xy[0]))
         y_lims = (np.nanmin(npx.xy[1]), np.nanmax(npx.xy[1]))
         setattr(npx, 'x_lims', x_lims)
@@ -79,13 +79,14 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
 
     def replot(self):
-        if 'ratemap' in self.plot_type:
+        plot2do = getattr(self, 'plot_type')
+        if 'ratemap' in plot2do:
             self.plotRateMap()
-        elif 'head_direction' in self.plot_type:
+        elif 'head_direction' in plot2do:
             self.plotHeadDirection()
-        elif 'spikes_on_path' in self.plot_type:
+        elif 'spikes_on_path' in plot2do:
             self.plotSpikesOnPath()
-        elif 'SAC' in self.plot_type:
+        elif 'SAC' in plot2do:
             self.plotSAC()
 
     def get_spike_times(self, id: int):
