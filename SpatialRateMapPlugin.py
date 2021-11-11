@@ -6,7 +6,7 @@ from phy.utils import selected_cluster_color
 import numpy as np
 import os
 from pathlib import Path
-from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
+from ephysiopy.openephys2py.OEKiloPhy import OpenEphysBinary
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
 import warnings
@@ -30,7 +30,7 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
         logger.debug("Great-great grandparent folder is: '%s'", path_to_top_folder)
-        npx = OpenEphysNPX(path_to_top_folder)
+        npx = OpenEphysBinary(path_to_top_folder)
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
@@ -77,6 +77,8 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
 
     def replot(self, plot2do='ratemap'):
+        if hasattr(self, 'plot_type'):
+            plot2do = getattr(self, 'plot_type')
         if 'ratemap' in plot2do:
             self.plotRateMap()
         elif 'head_direction' in plot2do:
