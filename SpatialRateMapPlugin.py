@@ -5,7 +5,7 @@ from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
 from phy.utils import selected_cluster_color
 import numpy as np
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 from ephysiopy.openephys2py.OEKiloPhy import OpenEphysBinary
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
@@ -43,7 +43,7 @@ def do_path_walk(pname: Path):
         for ff in f:
             if '.' not in c:  # ignore hidden directories
                 if 'data_array.npy' in ff:
-                    if PosTracker_match.search(d):
+                    if PurePath(d).match('*Pos_Tracker*/BINARY_group*'):
                         path2PosData = os.path.join(d)
                         print(f"Found pos data at: {path2PosData}")
                 if 'continuous.dat' in ff:
