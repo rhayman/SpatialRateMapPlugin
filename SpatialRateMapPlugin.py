@@ -18,6 +18,47 @@ warnings.filterwarnings("ignore", message="invalid value encountered in true_div
 import logging
 logger = logging.getLogger("phy")
 
+def fileContainsString(pname: str, searchStr: str) -> bool:
+    if os.path.exists(pname):
+        with open(pname, 'r') as f:
+            strs = f.read()
+        lines = strs.split('\n')
+        found = False
+        for line in lines:
+            if searchStr in line:
+                found = True
+        return found
+    else:
+        return False
+
+def do_path_walk(pname: Path):
+    import os
+    import re
+    APdata_match = re.compile('Rhythm_FPGA-[0-9][0-9][0-9].0')
+    LFPdata_match = re.compile('Rhythm_FPGA-[0-9][0-9][0-9].1')
+    PosTracker_match = re.compile('Pos_Tracker-[0-9][0-9][0-9].[0-9]/BINARY_group_[0-9]')
+
+    print(f"Doing walk on {pname}")
+    for d, c, f in os.walk(pname):
+        for ff in f:
+            if '.' not in c:  # ignore hidden directories
+                if 'data_array.npy' in ff:
+                    if PosTracker_match.search(d):
+                        path2PosData = os.path.join(d)
+                        print(f"Found pos data at: {path2PosData}")
+                if 'continuous.dat' in ff:
+                    if APdata_match.search(d):
+                        path2APdata = os.path.join(d)
+                        print(f"Found continuous data at: {path2APdata}")
+                    if LFPdata_match.search(d):
+                        path2LFPdata = os.path.join(d)
+                        print(f"Found continuous data at: {path2LFPdata}")
+                if 'sync_messages.txt' in ff:
+                    sync_file = os.path.join(
+                        d, 'sync_messages.txt')
+                    if fileContainsString(sync_file, 'Processor'):
+                        sync_message_file = sync_file
+                        print(f"Found sync_messages file at: {sync_file}")
 
 class SpatialRateMap(ManualClusteringView):
     plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
@@ -30,6 +71,7 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
         logger.debug("Great-great grandparent folder is: '%s'", path_to_top_folder)
+        do_path_walk(path_to_top_folder)
         npx = OpenEphysBinary(path_to_top_folder)
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
