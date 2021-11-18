@@ -1,3 +1,4 @@
+import logging
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
@@ -6,7 +7,7 @@ from phy.utils import selected_cluster_color
 import numpy as np
 import os
 from pathlib import Path, PurePath
-from ephysiopy.openephys2py.OEKiloPhy import OpenEphysBinary
+from ephysiopy.openephys2py.OEKiloPhy import OpenEphysBinary, OpenEphysNPX
 # Suppress warnings generated from doing the ffts for the spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
 import warnings
@@ -14,9 +15,8 @@ warnings.filterwarnings("ignore", message="invalid value encountered in sqrt")
 warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
 warnings.filterwarnings("ignore", message="invalid value encountered in greater")
 warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
-
-import logging
 logger = logging.getLogger("phy")
+
 
 def fileContainsString(pname: str, searchStr: str) -> bool:
     if os.path.exists(pname):
@@ -30,6 +30,7 @@ def fileContainsString(pname: str, searchStr: str) -> bool:
         return found
     else:
         return False
+
 
 def do_path_walk(pname: Path):
     import os
@@ -70,9 +71,7 @@ class SpatialRateMap(ManualClusteringView):
         # do this for now - maybe give loading option in future
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
-        logger.debug("Great-great grandparent folder is: '%s'", path_to_top_folder)
-        do_path_walk(path_to_top_folder)
-        npx = OpenEphysBinary(path_to_top_folder)
+        npx = OpenEphysNPX(path_to_top_folder)
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
