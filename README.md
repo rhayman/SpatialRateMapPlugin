@@ -47,7 +47,7 @@ Usage
 =====
 The most important thing the plugin needs (beyond ephysiopy) is a folder called "pos_data", **in the same place you've loaded phy from i.e where the spike_times.npy and spike_clusters.npy files are located from running KiloSort**. The pos_data folder must contain two files, one called data_array.npy and the other called timestamps.npy. They should look like this:
 
-data_array.npy - a 2 x m array where column 0 is x, column 1 is y and column 2 is timestamps IN SAMPLES. The timestamps are converted to seconds internally so make sure you save them in the xy.npy file as samples. The format PosTracker (see below) saves them in is unsigned int16.
+data_array.npy - a 2 x m array where column 0 is x and column 1 is y.
 
 timestamps.npy - a vector of timestamps, again in samples, that matches the length of the pos samples in data_array (i.e. m samples long in the above convention)
 
