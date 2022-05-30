@@ -78,8 +78,8 @@ class SpatialRateMap(ManualClusteringView):
         npx.load()
         setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         setattr(self, 'plot_type', 'ratemap')
-        x_lims = (np.nanmin(npx.xy[0]), np.nanmax(npx.xy[0]))
-        y_lims = (np.nanmin(npx.xy[1]), np.nanmax(npx.xy[1]))
+        x_lims = (np.nanmin(npx.xy[0]).astype(int), np.nanmax(npx.xy[0]).astype(int))
+        y_lims = (np.nanmin(npx.xy[1]).astype(int), np.nanmax(npx.xy[1]).astype(int))
         setattr(npx, 'x_lims', x_lims)
         setattr(npx, 'y_lims', y_lims)
         setattr(self, 'npx', npx)
@@ -113,6 +113,8 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.setPPM, name='Set pixels per metre', prompt=True, prompt_default=lambda: self.npx.ppm)
         self.actions.add(callback=self.setJumpMax, name='Max pos jump in pixels', prompt=True, prompt_default=lambda: self.npx.jumpmax)
         self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
+        self.actions.add(callback=self.setXLims, name='Set x limits', prompt=True, n_args=2, prompt_default=lambda: str(self.npx.x_lims).strip(")").strip("(").replace(",", ""))
+        self.actions.add(callback=self.setYLims, name='Set y limits', prompt=True, n_args=2, prompt_default=lambda: str(self.npx.y_lims).strip(")").strip("(").replace(",", ""))
         self.actions.add(callback=self.speedFilter, name='Filter speed (min max) cm/s', prompt=True, n_args=2)
         self.actions.add(callback=self.directionFilter, name='Filter direction ("w", "e", "n" or "s")', prompt=True, n_args=1)
         self.actions.add(callback=self.timeFilter, name='Filter times(s) (start -> stop)', prompt=True, n_args=2)
@@ -147,6 +149,14 @@ class SpatialRateMap(ManualClusteringView):
     def setJumpMax(self, val: int):
         self.npx.jumpmax = val
         self.npx.loadPos() # reload pos
+        self.replot()
+
+    def setXLims(self, _min: int, _max: int):
+        setattr(self.npx, 'x_lims', (_min, _max))
+        self.replot()
+
+    def setYLims(self, _min: int, _max: int):
+        setattr(self.npx, 'y_lims', (_min, _max))
         self.replot()
     
     def overlaySpikes(self, checked: bool):
