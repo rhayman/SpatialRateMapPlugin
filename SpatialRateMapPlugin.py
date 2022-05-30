@@ -111,6 +111,7 @@ class SpatialRateMap(ManualClusteringView):
         self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
         self.actions.separator()
         self.actions.add(callback=self.setPPM, name='Set pixels per metre', prompt=True, prompt_default=lambda: self.npx.ppm)
+        self.actions.add(callback=self.setJumpMax, name='Max pos jump in pixels', prompt=True, prompt_default=lambda: self.npx.jumpmax)
         self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
         self.actions.add(callback=self.speedFilter, name='Filter speed (min max) cm/s', prompt=True, n_args=2)
         self.actions.add(callback=self.directionFilter, name='Filter direction ("w", "e", "n" or "s")', prompt=True, n_args=1)
@@ -141,6 +142,11 @@ class SpatialRateMap(ManualClusteringView):
         self.npx.ppm = ppm
         self.npx.x_lims = None
         self.npx.y_lims = None
+        self.replot()
+
+    def setJumpMax(self, val: int):
+        self.npx.jumpmax = val
+        self.npx.loadPos() # reload pos
         self.replot()
     
     def overlaySpikes(self, checked: bool):
