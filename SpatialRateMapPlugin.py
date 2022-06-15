@@ -88,7 +88,7 @@ class SpatialRateMap(ManualClusteringView):
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
         npx = OpenEphysNPX(path_to_top_folder)
-        data_locations = do_path_walk()
+        data_locations = do_path_walk(path_to_top_folder)
         if 'path2PosData' in data_locations.keys():
             setattr(npx, 'path2PosData', data_locations['path2PosData'])
         setattr(npx, 'ppm', 400)
