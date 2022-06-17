@@ -7,14 +7,18 @@ from phy.utils import selected_cluster_color
 import numpy as np
 import os
 from pathlib import Path, PurePath
-from ephysiopy.openephys2py.OEKiloPhy import OpenEphysBinary, OpenEphysNPX
-# Suppress warnings generated from doing the ffts for the spatial autocorrelogram
+from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
+# Suppress warnings generated from doing the ffts for the
+# spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
 import warnings
 warnings.filterwarnings("ignore", message="invalid value encountered in sqrt")
-warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
-warnings.filterwarnings("ignore", message="invalid value encountered in greater")
-warnings.filterwarnings("ignore", message="invalid value encountered in true_divide")
+warnings.filterwarnings("ignore", message="invalid value encountered in \
+    subtract")
+warnings.filterwarnings("ignore", message="invalid value encountered in \
+    greater")
+warnings.filterwarnings("ignore", message="invalid value encountered in \
+    true_divide")
 logger = logging.getLogger("phy")
 
 
@@ -42,8 +46,9 @@ def do_path_walk(pname: Path) -> dict:
     PosTracker_str = 'Pos_Tracker-[0-9][0-9][0-9].[0-9]/BINARY_group_[0-9]'
     TrackingPlugin_str = 'Tracking_Port-[0-9][0-9][0-9].0'
 
-    data_locations_keys = ['path2PosData', 'posDataType', 'path2APdata', 'path2LFPdata',
-                            'path2NPXAPdata', 'path2NPXLFPdata', 'sync_message_file']
+    data_locations_keys = ['path2PosData', 'posDataType', 'path2APdata',
+                           'path2LFPdata', 'path2NPXAPdata', 'path2NPXLFPdata',
+                           'sync_message_file']
     data_locations = dict.fromkeys(data_locations_keys)
 
     print(f"Doing walk on {pname}")
@@ -71,19 +76,21 @@ def do_path_walk(pname: Path) -> dict:
                         d, 'sync_messages.txt')
                     if fileContainsString(sync_file, 'Processor'):
                         data_locations['sync_message_file'] = sync_file
-    
+
     for k in data_locations.keys():
         if data_locations[k] is not None:
             print(f"{k} : {data_locations[k]}")
-    
+
     return data_locations
 
 
 class SpatialRateMap(ManualClusteringView):
-    plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
+    #  use matplotlib instead of OpenGL (the default)
+    plot_canvas_class = PlotCanvasMpl
 
     def __init__(self, features=None):
-        """features is a function (cluster_id => Bunch(spike_times, ...)) where data is a 3D array."""
+        """features is a function (cluster_id => Bunch(spike_times, ...))
+        where data is a 3D array."""
         super(SpatialRateMap, self).__init__()
         self.features = features
         # do this for now - maybe give loading option in future
@@ -103,8 +110,10 @@ class SpatialRateMap(ManualClusteringView):
         npx.load()
         setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         setattr(self, 'plot_type', 'ratemap')
-        x_lims = (np.nanmin(npx.xy[0]).astype(int), np.nanmax(npx.xy[0]).astype(int))
-        y_lims = (np.nanmin(npx.xy[1]).astype(int), np.nanmax(npx.xy[1]).astype(int))
+        x_lims = (np.nanmin(npx.xy[0]).astype(int),
+                  np.nanmax(npx.xy[0]).astype(int))
+        y_lims = (np.nanmin(npx.xy[1]).astype(int),
+                  np.nanmax(npx.xy[1]).astype(int))
         setattr(npx, 'x_lims', x_lims)
         setattr(npx, 'y_lims', y_lims)
         setattr(self, 'npx', npx)
@@ -126,24 +135,46 @@ class SpatialRateMap(ManualClusteringView):
         - Add the view to the GUI.
         - Update the view's attribute from the GUI state
         - Add the default view actions (auto_update, screenshot)
-        - Bind the on_select() method to the select event raised by the supervisor.
+        - Bind the on_select() method to the select event raised by the
+          supervisor.
         """
         super(SpatialRateMap, self).attach(gui)
 
-        self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path", menu="Test", view=self, show_shortcut=False)
-        self.actions.add(callback=self.plotRateMap, name="ratemap", menu="Test", view=self, show_shortcut=False)
-        self.actions.add(callback=self.plotHeadDirection, name="Head direction(x) by speed(y)", menu="Test", view=self, show_shortcut=False)
-        self.actions.add(callback=self.plotSAC, name="SAC", menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotSpikesOnPath, name="spikes_on_path",
+                         menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotRateMap, name="ratemap",
+                         menu="Test", view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotHeadDirection,
+                         name="Head direction(x) by speed(y)", menu="Test",
+                         view=self, show_shortcut=False)
+        self.actions.add(callback=self.plotSAC, name="SAC", menu="Test",
+                         view=self, show_shortcut=False)
         self.actions.separator()
-        self.actions.add(callback=self.setPPM, name='Set pixels per metre', prompt=True, prompt_default=lambda: self.npx.ppm)
-        self.actions.add(callback=self.setJumpMax, name='Max pos jump in pixels', prompt=True, prompt_default=lambda: self.npx.jumpmax)
-        self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin', prompt=True, n_args=1, prompt_default=lambda: self.npx.cmsPerBin)
-        self.actions.add(callback=self.setXLims, name='Set x limits', prompt=True, n_args=2, prompt_default=lambda: str(self.npx.x_lims).strip(")").strip("(").replace(",", ""))
-        self.actions.add(callback=self.setYLims, name='Set y limits', prompt=True, n_args=2, prompt_default=lambda: str(self.npx.y_lims).strip(")").strip("(").replace(",", ""))
-        self.actions.add(callback=self.speedFilter, name='Filter speed (min max) cm/s', prompt=True, n_args=2)
-        self.actions.add(callback=self.directionFilter, name='Filter direction ("w", "e", "n" or "s")', prompt=True, n_args=1)
-        self.actions.add(callback=self.timeFilter, name='Filter times(s) (start -> stop)', prompt=True, n_args=2)
-        self.actions.add(callback=self.overlaySpikes, name='Overlay spikes', checkable=True, checked=False)
+        self.actions.add(callback=self.setPPM, name='Set pixels per metre',
+                         prompt=True, prompt_default=lambda: self.npx.ppm)
+        self.actions.add(callback=self.setJumpMax,
+                         name='Max pos jump in pixels', prompt=True,
+                         prompt_default=lambda: self.npx.jumpmax)
+        self.actions.add(callback=self.setCmsPerBin, name='Set cms per bin',
+                         prompt=True, n_args=1,
+                         prompt_default=lambda: self.npx.cmsPerBin)
+        self.actions.add(callback=self.setXLims, name='Set x limits',
+                         prompt=True, n_args=2,
+                         prompt_default=lambda: str(self.npx.x_lims).strip(")").strip("(").replace(",", ""))
+        self.actions.add(callback=self.setYLims, name='Set y limits',
+                         prompt=True, n_args=2,
+                         prompt_default=lambda: str(self.npx.y_lims).strip(")").strip("(").replace(",", ""))
+        self.actions.add(callback=self.speedFilter,
+                         name='Filter speed (min max) cm/s',
+                         prompt=True, n_args=2)
+        self.actions.add(callback=self.directionFilter,
+                         name='Filter direction ("w", "e", "n" or "s")',
+                         prompt=True, n_args=1)
+        self.actions.add(callback=self.timeFilter,
+                         name='Filter times(s) (start -> stop)',
+                         prompt=True, n_args=2)
+        self.actions.add(callback=self.overlaySpikes, name='Overlay spikes',
+                         checkable=True, checked=False)
 
     def replot(self, plot2do='ratemap'):
         if hasattr(self, 'plot_type'):
@@ -183,7 +214,7 @@ class SpatialRateMap(ManualClusteringView):
     def setYLims(self, _min: int, _max: int):
         setattr(self.npx, 'y_lims', (_min, _max))
         self.replot()
-    
+
     def overlaySpikes(self, checked: bool):
         self.overlay_spikes = checked
 
@@ -220,7 +251,7 @@ class SpatialRateMap(ManualClusteringView):
                 spk_times, ax=self.canvas.ax, markersize=3, c=col)
             self.canvas.update()
         self.plot_type = "spikes_on_path"
-        
+
     def plotHeadDirection(self):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
@@ -260,15 +291,15 @@ class SpatialRateMap(ManualClusteringView):
         else:
             gs = 'NaN'
         self.canvas.ax.text(
-            0.95, 0.05, 
+            0.95, 0.05,
             gs,
             c='w', fontsize=12,
             ha='center', va='top',
             transform=self.canvas.ax.transAxes
         )
-         # ----------- END TEXT ANNOTATION DEBUG ----------
         self.plot_type = "SAC"
         self.canvas.update()
+
 
 class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
