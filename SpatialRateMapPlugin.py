@@ -42,8 +42,7 @@ def do_path_walk(pname: Path) -> dict:
     PosTracker_str = 'Pos_Tracker-[0-9][0-9][0-9].[0-9]/BINARY_group_[0-9]'
     TrackingPlugin_str = 'Tracking_Port-[0-9][0-9][0-9].0'
 
-    
-    data_locations_keys = ['path2PosData', 'path2APdata', 'path2LFPdata',
+    data_locations_keys = ['path2PosData', 'posDataType', 'path2APdata', 'path2LFPdata',
                             'path2NPXAPdata', 'path2NPXLFPdata', 'sync_message_file']
     data_locations = dict.fromkeys(data_locations_keys)
 
@@ -54,8 +53,10 @@ def do_path_walk(pname: Path) -> dict:
                 if 'data_array.npy' in ff:
                     if PurePath(d).match(PosTracker_str):
                         data_locations['path2PosData'] = os.path.join(d)
+                        data_locations['posDataType'] = 'PosTracker'
                     if PurePath(d).match(TrackingPlugin_str):
                         data_locations['path2PosData'] = os.path.join(d)
+                        data_locations['posDataType'] = 'TrackingPlugin'
                 if 'continuous.dat' in ff:
                     if APdata_match.search(d):
                         data_locations['path2APdata'] = os.path.join(d)
@@ -77,6 +78,7 @@ def do_path_walk(pname: Path) -> dict:
     
     return data_locations
 
+
 class SpatialRateMap(ManualClusteringView):
     plot_canvas_class = PlotCanvasMpl  # use matplotlib instead of OpenGL (the default)
 
@@ -86,11 +88,15 @@ class SpatialRateMap(ManualClusteringView):
         self.features = features
         # do this for now - maybe give loading option in future
         this_folder = os.getcwd()
-        path_to_top_folder = Path(this_folder).parents[4]
+        path_to_top_folder = Path(this_folder).parents[3]
         npx = OpenEphysNPX(path_to_top_folder)
         data_locations = do_path_walk(path_to_top_folder)
         if 'path2PosData' in data_locations.keys():
             setattr(npx, 'path2PosData', data_locations['path2PosData'])
+        if data_locations['posDataType'] == 'PosTracker':
+            setattr(npx, 'pos_timebase', 3e4)
+        if data_locations['posDataType'] == 'TrackingPlugin':
+            setattr(npx, 'pos_timebase', 1e7)
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
@@ -153,7 +159,7 @@ class SpatialRateMap(ManualClusteringView):
 
     def get_spike_times(self, id: int):
         b = self.features(id, load_all=True)
-        return np.array(b.data * 3e4).astype(int)
+        return np.array(b.data)
 
     def setCmsPerBin(self, cms_per_bin: int):
         self.npx.cmsPerBin = cms_per_bin
@@ -167,7 +173,7 @@ class SpatialRateMap(ManualClusteringView):
 
     def setJumpMax(self, val: int):
         self.npx.jumpmax = val
-        self.npx.loadPos() # reload pos
+        self.npx.loadPos()  # reload pos
         self.replot()
 
     def setXLims(self, _min: int, _max: int):
@@ -198,7 +204,7 @@ class SpatialRateMap(ManualClusteringView):
         self.replot()
 
     def timeFilter(self, start: int, stop: int):
-        d = {'time' : (start, stop)}
+        d = {'time': (start, stop)}
         self.npx.filterPosition(d)
 
     def plotSpikesOnPath(self):
@@ -215,7 +221,6 @@ class SpatialRateMap(ManualClusteringView):
             self.canvas.update()
         self.plot_type = "spikes_on_path"
         
-
     def plotHeadDirection(self):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
@@ -227,6 +232,8 @@ class SpatialRateMap(ManualClusteringView):
 
     def plotRateMap(self):
         spk_times = self.get_spike_times(self.cluster_ids[0])
+        for i in range(10):
+            print(f"{spk_times[i]}")
         self.canvas.ax.clear()
         self.npx.makeRateMap(spk_times, self.canvas.ax)
         self.plot_type = "ratemap"
