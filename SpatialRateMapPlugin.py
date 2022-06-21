@@ -44,7 +44,7 @@ def do_path_walk(pname: Path) -> dict:
     NPX_APdata_match = re.compile('Neuropix-PXI-[0-9][0-9][0-9].0')
     NPX_LFPdata_match = re.compile('Neuropix-PXI-[0-9][0-9][0-9].1')
     PosTracker_str = 'Pos_Tracker-[0-9][0-9][0-9].[0-9]/BINARY_group_[0-9]'
-    TrackingPlugin_str = 'Tracking_Port-[0-9][0-9][0-9].0'
+    TrackingPlugin_str = 'Tracking_Port-[0-9][0-9][0-9].0/BINARY_group_[0-9]'
 
     data_locations_keys = ['path2PosData', 'posDataType', 'path2APdata',
                            'path2LFPdata', 'path2NPXAPdata', 'path2NPXLFPdata',
@@ -102,8 +102,10 @@ class SpatialRateMap(ManualClusteringView):
             setattr(npx, 'path2PosData', data_locations['path2PosData'])
         if data_locations['posDataType'] == 'PosTracker':
             setattr(npx, 'pos_timebase', 3e4)
+            setattr(npx, 'pos_data_type', 'PosTracker')
         if data_locations['posDataType'] == 'TrackingPlugin':
             setattr(npx, 'pos_timebase', 1e7)
+            setattr(npx, 'pos_data_type', 'TrackingPlugin')
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
@@ -263,8 +265,6 @@ class SpatialRateMap(ManualClusteringView):
 
     def plotRateMap(self):
         spk_times = self.get_spike_times(self.cluster_ids[0])
-        for i in range(10):
-            print(f"{spk_times[i]}")
         self.canvas.ax.clear()
         self.npx.makeRateMap(spk_times, self.canvas.ax)
         self.plot_type = "ratemap"
