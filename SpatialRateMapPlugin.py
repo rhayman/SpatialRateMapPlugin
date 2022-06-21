@@ -102,8 +102,10 @@ class SpatialRateMap(ManualClusteringView):
             setattr(npx, 'path2PosData', data_locations['path2PosData'])
         if data_locations['posDataType'] == 'PosTracker':
             setattr(npx, 'pos_timebase', 3e4)
+            setattr(npx, 'pos_data_type', 'PosTracker')
         if data_locations['posDataType'] == 'TrackingPlugin':
             setattr(npx, 'pos_timebase', 1e7)
+            setattr(npx, 'pos_data_type', 'TrackingPlugin')
         setattr(npx, 'ppm', 400)
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
