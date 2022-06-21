@@ -8,6 +8,7 @@ import numpy as np
 import os
 from pathlib import Path, PurePath
 from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
+from ephysiopy.__about__ import __version__ as ephysiopy_vers
 # Suppress warnings generated from doing the ffts for the
 # spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
@@ -94,6 +95,7 @@ class SpatialRateMap(ManualClusteringView):
         super(SpatialRateMap, self).__init__()
         self.features = features
         # do this for now - maybe give loading option in future
+        print(f"Working with ephysiopy version: {ephysiopy_vers}")
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[3]
         npx = OpenEphysNPX(path_to_top_folder)
