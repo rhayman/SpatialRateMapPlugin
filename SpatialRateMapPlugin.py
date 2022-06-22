@@ -121,6 +121,10 @@ class SpatialRateMap(ManualClusteringView):
         setattr(npx, 'y_lims', y_lims)
         setattr(self, 'npx', npx)
         self.overlay_spikes = False
+        
+        print("---------------------------- DEBUG --------------------")
+        print(f"npx pos: {npx.xy[0,1:100]}")
+        print(f"(npx xyTS: {npx.xyTS[0:50]}")
 
     def on_select(self, cluster_ids=(), **kwargs):
         self.cluster_ids = cluster_ids
