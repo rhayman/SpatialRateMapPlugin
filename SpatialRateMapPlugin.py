@@ -112,7 +112,6 @@ class SpatialRateMap(ManualClusteringView):
         setattr(npx, 'cmsPerBin', 3)
         setattr(npx, 'nchannels', 32)
         npx.load()
-        setattr(npx, 'pos_sample_rate', 1.0/np.mean(np.diff(npx.xyTS)))
         setattr(self, 'plot_type', 'ratemap')
         x_lims = (np.nanmin(npx.xy[0]).astype(int),
                   np.nanmax(npx.xy[0]).astype(int))
