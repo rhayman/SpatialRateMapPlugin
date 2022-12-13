@@ -4,11 +4,11 @@ import os
 # spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
 import warnings
-from pathlib import Path, PurePath
+from pathlib import Path
 
 import numpy as np
 from ephysiopy.__about__ import __version__ as ephysiopy_vers
-from ephysiopy.openephys2py.OEKiloPhy import OpenEphysNPX
+from ephysiopy.io.recording import OpenEphysBase
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
@@ -48,65 +48,6 @@ def fileContainsString(pname: str, searchStr: str) -> bool:
         return False
 
 
-def do_path_walk(pname: Path) -> dict:
-    import os
-    import re
-
-    APdata_match = re.compile("Rhythm_FPGA-[0-9][0-9][0-9].0")
-    LFPdata_match = re.compile("Rhythm_FPGA-[0-9][0-9][0-9].1")
-    NPX_APdata_match = re.compile("Neuropix-PXI-[0-9][0-9][0-9].0")
-    NPX_LFPdata_match = re.compile("Neuropix-PXI-[0-9][0-9][0-9].1")
-    TrackMe_match = re.compile("TrackMe-[0-9][0-9][0-9].TrackingNode")
-    PosTracker_str = "Pos_Tracker-[0-9][0-9][0-9].[0-9]/BINARY_group_[0-9]"
-    TrackingPlugin_str = "Tracking_Port-[0-9][0-9][0-9].0/BINARY_group_[0-9]"
-    
-
-    data_locations_keys = [
-        "path2PosData",
-        "posDataType",
-        "path2APdata",
-        "path2LFPdata",
-        "path2NPXAPdata",
-        "path2NPXLFPdata",
-        "sync_message_file",
-    ]
-    data_locations = dict.fromkeys(data_locations_keys)
-
-    print(f"Doing walk on {pname}")
-    for d, c, f in os.walk(pname):
-        for ff in f:
-            if "." not in c:  # ignore hidden directories
-                if "data_array.npy" in ff:
-                    if PurePath(d).match(PosTracker_str):
-                        data_locations["path2PosData"] = os.path.join(d)
-                        data_locations["posDataType"] = "PosTracker"
-                    if PurePath(d).match(TrackingPlugin_str):
-                        data_locations["path2PosData"] = os.path.join(d)
-                        data_locations["posDataType"] = "TrackingPlugin"
-                if "continuous.dat" in ff:
-                    if TrackMe_match.search(d):
-                        data_locations["path2PosData"] = os.path.join(d)
-                        data_locations["posDataType"] = "TrackMe"
-                    if APdata_match.search(d):
-                        data_locations["path2APdata"] = os.path.join(d)
-                    if LFPdata_match.search(d):
-                        data_locations["path2LFPdata"] = os.path.join(d)
-                    if NPX_APdata_match.search(d):
-                        data_locations["path2NPXAPdata"] = os.path.join(d)
-                    if NPX_LFPdata_match.search(d):
-                        data_locations["path2NPXLFPdata"] = os.path.join(d)
-                if "sync_messages.txt" in ff:
-                    sync_file = os.path.join(d, "sync_messages.txt")
-                    if fileContainsString(sync_file, "Processor"):
-                        data_locations["sync_message_file"] = sync_file
-
-    for k in data_locations.keys():
-        if data_locations[k] is not None:
-            print(f"{k} : {data_locations[k]}")
-
-    return data_locations
-
-
 class SpatialRateMap(ManualClusteringView):
     #  use matplotlib instead of OpenGL (the default)
     plot_canvas_class = PlotCanvasMpl
@@ -117,37 +58,28 @@ class SpatialRateMap(ManualClusteringView):
         super(SpatialRateMap, self).__init__()
         self.features = features
         # do this for now - maybe give loading option in future
-        print(f"Working with ephysiopy version: {ephysiopy_vers}")
+        print(f"Using ephysiopy version: {ephysiopy_vers}")
         this_folder = os.getcwd()
-        path_to_top_folder = Path(this_folder).parents[3]
-        npx = OpenEphysNPX(path_to_top_folder)
-        data_locations = do_path_walk(path_to_top_folder)
-        if "path2PosData" in data_locations.keys():
-            setattr(npx, "path2PosData", data_locations["path2PosData"])
-        if data_locations["posDataType"] == "PosTracker":
-            setattr(npx, "pos_timebase", 3e4)
-            setattr(npx, "pos_data_type", "PosTracker")
-        if data_locations["posDataType"] == "TrackMe":
-            setattr(npx, "pos_data_type", "TrackMe")
-            setattr(npx, "pos_timebase", 3e4)
-        if data_locations["posDataType"] == "TrackingPlugin":
-            setattr(npx, "pos_timebase", 1e7)
-            setattr(npx, "pos_data_type", "TrackingPlugin")
-        setattr(npx, "ppm", 400)
-        setattr(npx, "cmsPerBin", 3)
-        setattr(npx, "nchannels", 32)
-        npx.load()
+        path_to_top_folder = Path(this_folder).parents[4]
+        print(f"Parent folder: {path_to_top_folder}")
+        OEBase = OpenEphysBase(path_to_top_folder)
+        OEBase.find_files(path_to_top_folder, "experiment1", "recording1")
+        setattr(OEBase, "ppm", 400)
+        cmsPerBin = 3
+        setattr(OEBase, "cmsPerBin", cmsPerBin)
+        OEBase.cmsPerBin = cmsPerBin
+        setattr(OEBase, "nchannels", 32)
+        OEBase.load_pos_data(path_to_top_folder)
+        setattr(OEBase.PosCalcs, "cmsPerBin", cmsPerBin)
         setattr(self, "plot_type", "ratemap")
-        x_lims = (np.nanmin(npx.xy[0]).astype(int), np.nanmax(npx.xy[0]).astype(int))
-        y_lims = (np.nanmin(npx.xy[1]).astype(int), np.nanmax(npx.xy[1]).astype(int))
-        setattr(npx, "x_lims", x_lims)
-        setattr(npx, "y_lims", y_lims)
-        setattr(self, "npx", npx)
+        x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
+                  np.nanmax(OEBase.PosCalcs.xy[0]).astype(int))
+        y_lims = (np.nanmin(OEBase.PosCalcs.xy[1]).astype(int),
+                  np.nanmax(OEBase.PosCalcs.xy[1]).astype(int))
+        setattr(OEBase, "x_lims", x_lims)
+        setattr(OEBase, "y_lims", y_lims)
+        setattr(self, "OEBase", OEBase)
         self.overlay_spikes = False
-
-        print("---------------------------- DEBUG --------------------")
-        print(f"npx pos: {npx.xy[0,1:100]}")
-        print(f"(npx xyTS: {npx.xyTS[0:50]}")
 
     def on_select(self, cluster_ids=(), **kwargs):
         self.cluster_ids = cluster_ids
@@ -203,27 +135,27 @@ class SpatialRateMap(ManualClusteringView):
             callback=self.setPPM,
             name="Set pixels per metre",
             prompt=True,
-            prompt_default=lambda: self.npx.ppm,
+            prompt_default=lambda: self.OEBase.ppm,
         )
         self.actions.add(
             callback=self.setJumpMax,
             name="Max pos jump in pixels",
             prompt=True,
-            prompt_default=lambda: self.npx.jumpmax,
+            prompt_default=lambda: self.OEBase.jumpmax,
         )
         self.actions.add(
             callback=self.setCmsPerBin,
             name="Set cms per bin",
             prompt=True,
             n_args=1,
-            prompt_default=lambda: self.npx.cmsPerBin,
+            prompt_default=lambda: self.OEBase.cmsPerBin,
         )
         self.actions.add(
             callback=self.setXLims,
             name="Set x limits",
             prompt=True,
             n_args=2,
-            prompt_default=lambda: str(self.npx.x_lims)
+            prompt_default=lambda: str(self.OEBase.x_lims)
             .strip(")")
             .strip("(")
             .replace(",", ""),
@@ -233,7 +165,7 @@ class SpatialRateMap(ManualClusteringView):
             name="Set y limits",
             prompt=True,
             n_args=2,
-            prompt_default=lambda: str(self.npx.y_lims)
+            prompt_default=lambda: str(self.OEBase.y_lims)
             .strip(")")
             .strip("(")
             .replace(",", ""),
@@ -280,26 +212,28 @@ class SpatialRateMap(ManualClusteringView):
         return np.array(b.data)
 
     def setCmsPerBin(self, cms_per_bin: int):
-        self.npx.cmsPerBin = cms_per_bin
+        self.OEBase.cmsPerBin = cms_per_bin
+        setattr(self.OEBase.PosCalcs, "cmsPerBin", cms_per_bin)
         self.replot()
 
     def setPPM(self, ppm: int):
-        self.npx.ppm = ppm
-        self.npx.x_lims = None
-        self.npx.y_lims = None
+        self.OEBase.ppm = ppm
+        setattr(self.OEBase.PosCalcs, "ppm", ppm)
+        self.OEBase.x_lims = None
+        self.OEBase.y_lims = None
         self.replot()
 
     def setJumpMax(self, val: int):
-        self.npx.jumpmax = val
-        self.npx.loadPos()  # reload pos
+        self.OEBase.jumpmax = val
+        self.OEBase.loadPos()  # reload pos
         self.replot()
 
     def setXLims(self, _min: int, _max: int):
-        setattr(self.npx, "x_lims", (_min, _max))
+        setattr(self.OEBase, "x_lims", (_min, _max))
         self.replot()
 
     def setYLims(self, _min: int, _max: int):
-        setattr(self.npx, "y_lims", (_min, _max))
+        setattr(self.OEBase, "y_lims", (_min, _max))
         self.replot()
 
     def overlaySpikes(self, checked: bool):
@@ -310,7 +244,7 @@ class SpatialRateMap(ManualClusteringView):
             d = None
         else:
             d = {"speed": [_min, _max]}
-        self.npx.filterPosition(d)
+        self.OEBase.filterPosition(d)
         self.replot()
 
     def directionFilter(self, dir2filt: str):
@@ -318,12 +252,12 @@ class SpatialRateMap(ManualClusteringView):
             d = None
         else:
             d = {"dir": dir2filt}
-        self.npx.filterPosition(d)
+        self.OEBase.PosCalcs.filterPos(d)
         self.replot()
 
     def timeFilter(self, start: int, stop: int):
         d = {"time": (start, stop)}
-        self.npx.filterPosition(d)
+        self.OEBase.PosCalcs.filterPos(d)
 
     def plotSpikesOnPath(self):
         self.canvas.ax.clear()
@@ -334,7 +268,7 @@ class SpatialRateMap(ManualClusteringView):
         for idx, cluster in enumerate(clusters):
             spk_times = self.get_spike_times(cluster)
             col = selected_cluster_color(idx)[0:3]
-            self.npx.makeSpikePathPlot(
+            self.OEBase.makeSpikePathPlot(
                 spk_times, ax=self.canvas.ax, markersize=3, c=col
             )
             self.canvas.update()
@@ -343,8 +277,8 @@ class SpatialRateMap(ManualClusteringView):
     def plotHeadDirection(self):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
-        print(f"npx speed masked: {np.ma.is_masked(self.npx.speed)}")
-        self.npx.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
+        # print(f"OEBase speed masked: {np.ma.is_masked(self.OEBase.speed)}")
+        self.OEBase.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
         self.canvas.ax.set_aspect(10)
         self.plot_type = "head_direction"
         self.canvas.update()
@@ -352,19 +286,19 @@ class SpatialRateMap(ManualClusteringView):
     def plotRateMap(self):
         spk_times = self.get_spike_times(self.cluster_ids[0])
         self.canvas.ax.clear()
-        self.npx.makeRateMap(spk_times, self.canvas.ax)
+        self.OEBase.makeRateMap(spk_times, self.canvas.ax)
         self.plot_type = "ratemap"
         self.canvas.update()
 
     def plotSAC(self):
         self.canvas.ax.clear()
         spk_times = self.get_spike_times(self.cluster_ids[0])
-        self.npx.makeSAC(spk_times, self.canvas.ax)
+        self.OEBase.makeSAC(spk_times, self.canvas.ax)
         # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
-        self.npx.initialise()
-        spk_times_in_pos_samples = self.npx.getSpikePosIndices(spk_times)
-        spk_weights = np.bincount(spk_times_in_pos_samples, minlength=self.npx.npos)
-        rmap = self.npx.RateMapMaker.getMap(spk_weights)
+        self.OEBase.initialise()
+        spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
+        spk_weights = np.bincount(spk_times_in_pos_samples, minlength=self.OEBase.npos)
+        rmap = self.OEBase.RateMapMaker.getMap(spk_weights)
         from ephysiopy.common import gridcell
 
         S = gridcell.SAC()
