@@ -56,6 +56,9 @@ class SpatialRateMap(ManualClusteringView):
         """features is a function (cluster_id => Bunch(spike_times, ...))
         where data is a 3D array."""
         super(SpatialRateMap, self).__init__()
+        self.state_attrs += (
+            'ppm', 'cmsPerBin', 'x_lims', 'y_lims'
+        )
         self.features = features
         # do this for now - maybe give loading option in future
         print(f"Using ephysiopy version: {ephysiopy_vers}")
@@ -297,7 +300,8 @@ class SpatialRateMap(ManualClusteringView):
         # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
         self.OEBase.initialise()
         spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
-        spk_weights = np.bincount(spk_times_in_pos_samples, minlength=self.OEBase.npos)
+        spk_weights = np.bincount(
+            spk_times_in_pos_samples, minlength=self.OEBase.npos)
         rmap = self.OEBase.RateMapMaker.getMap(spk_weights)
         from ephysiopy.common import gridcell
 
@@ -328,6 +332,7 @@ class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
         def create_ratemap_view():
             """A function that creates and returns a view."""
-            return SpatialRateMap(features=controller._get_feature_view_spike_times)
+            return SpatialRateMap(
+                features=controller._get_feature_view_spike_times)
 
         controller.view_creator["SpatialRateMap"] = create_ratemap_view
