@@ -64,15 +64,15 @@ class SpatialRateMap(ManualClusteringView):
         print(f"Using ephysiopy version: {ephysiopy_vers}")
         this_folder = os.getcwd()
         path_to_top_folder = Path(this_folder).parents[4]
-        print(f"Parent folder: {path_to_top_folder}")
         OEBase = OpenEphysBase(path_to_top_folder)
-        OEBase.find_files(path_to_top_folder, "experiment1", "recording1")
-        setattr(OEBase, "ppm", 400)
+        ppm = 800
+        setattr(OEBase, "ppm", ppm)
+        jumpmax = 100
         cmsPerBin = 3
         setattr(OEBase, "cmsPerBin", cmsPerBin)
         OEBase.cmsPerBin = cmsPerBin
         setattr(OEBase, "nchannels", 32)
-        OEBase.load_pos_data(path_to_top_folder)
+        OEBase.load_pos_data(ppm, jumpmax, cm=False)
         setattr(OEBase.PosCalcs, "cmsPerBin", cmsPerBin)
         setattr(self, "plot_type", "ratemap")
         x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
@@ -211,6 +211,9 @@ class SpatialRateMap(ManualClusteringView):
             self.plotSAC()
 
     def get_spike_times(self, id: int):
+        '''
+        spike times are returned in seconds
+        '''
         b = self.features(id, load_all=True)
         return np.array(b.data)
 
@@ -283,6 +286,7 @@ class SpatialRateMap(ManualClusteringView):
         # print(f"OEBase speed masked: {np.ma.is_masked(self.OEBase.speed)}")
         self.OEBase.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
         self.canvas.ax.set_aspect(10)
+        self.canvas.ax.set_xlabel("Heading")
         self.plot_type = "head_direction"
         self.canvas.update()
 
