@@ -73,7 +73,8 @@ class SpatialRateMap(ManualClusteringView):
         OEBase.binsize = binsize
         setattr(OEBase, "nchannels", 32)
         OEBase.load_pos_data(ppm, jumpmax, cm=False)
-        setattr(OEBase.PosCalcs, "binsize", binsize)
+        OEBase.initialise()
+        setattr(OEBase.RateMap, "binsize", binsize)
         setattr(self, "plot_type", "ratemap")
         x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
                   np.nanmax(OEBase.PosCalcs.xy[0]).astype(int))
@@ -219,7 +220,7 @@ class SpatialRateMap(ManualClusteringView):
 
     def setbinsize(self, binsz: int):
         self.OEBase.binsize = binsz
-        setattr(self.OEBase.PosCalcs, "binsize", binsz)
+        setattr(self.OEBase.RateMap, "binsize", binsz)
         self.replot()
 
     def setPPM(self, ppm: int):
