@@ -57,7 +57,7 @@ class SpatialRateMap(ManualClusteringView):
         where data is a 3D array."""
         super(SpatialRateMap, self).__init__()
         self.state_attrs += (
-            'ppm', 'cmsPerBin', 'x_lims', 'y_lims'
+            'ppm', 'binsize', 'x_lims', 'y_lims'
         )
         self.features = features
         # do this for now - maybe give loading option in future
@@ -68,12 +68,12 @@ class SpatialRateMap(ManualClusteringView):
         ppm = 800
         setattr(OEBase, "ppm", ppm)
         jumpmax = 100
-        cmsPerBin = 3
-        setattr(OEBase, "cmsPerBin", cmsPerBin)
-        OEBase.cmsPerBin = cmsPerBin
+        binsize = 3
+        setattr(OEBase, "binsize", binsize)
+        OEBase.binsize = binsize
         setattr(OEBase, "nchannels", 32)
         OEBase.load_pos_data(ppm, jumpmax, cm=False)
-        setattr(OEBase.PosCalcs, "cmsPerBin", cmsPerBin)
+        setattr(OEBase.PosCalcs, "binsize", binsize)
         setattr(self, "plot_type", "ratemap")
         x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
                   np.nanmax(OEBase.PosCalcs.xy[0]).astype(int))
@@ -147,11 +147,11 @@ class SpatialRateMap(ManualClusteringView):
             prompt_default=lambda: self.OEBase.jumpmax,
         )
         self.actions.add(
-            callback=self.setCmsPerBin,
-            name="Set cms per bin",
+            callback=self.setbinsize,
+            name="Set bin size",
             prompt=True,
             n_args=1,
-            prompt_default=lambda: self.OEBase.cmsPerBin,
+            prompt_default=lambda: self.OEBase.binsize,
         )
         self.actions.add(
             callback=self.setXLims,
@@ -217,9 +217,9 @@ class SpatialRateMap(ManualClusteringView):
         b = self.features(id, load_all=True)
         return np.array(b.data)
 
-    def setCmsPerBin(self, cms_per_bin: int):
-        self.OEBase.cmsPerBin = cms_per_bin
-        setattr(self.OEBase.PosCalcs, "cmsPerBin", cms_per_bin)
+    def setbinsize(self, binsz: int):
+        self.OEBase.binsize = binsz
+        setattr(self.OEBase.PosCalcs, "binsize", binsz)
         self.replot()
 
     def setPPM(self, ppm: int):
