@@ -152,7 +152,16 @@ class SpatialRateMap(ManualClusteringView):
             name="Set bin size",
             prompt=True,
             n_args=1,
-            prompt_default=lambda: self.OEBase.binsize,
+            prompt_default=lambda: self.OEBase.RateMap.binsize,
+        )
+        self.actions.add(
+            callback=self.setNBins,
+            name="Set number of bins",
+            prompt=True,
+            prompt_default=lambda: str(self.OEBase.RateMap.nBins)
+            .strip(")")
+            .strip("(")
+            .replace(",", ""),
         )
         self.actions.add(
             callback=self.setXLims,
@@ -221,6 +230,10 @@ class SpatialRateMap(ManualClusteringView):
     def setbinsize(self, binsz: int):
         self.OEBase.binsize = binsz
         setattr(self.OEBase.RateMap, "binsize", binsz)
+        self.replot()
+
+    def setNBins(self, b0: int, bn: int):
+        setattr(self.OEBase.RateMap, "nBins", (b0, bn))
         self.replot()
 
     def setPPM(self, ppm: int):
