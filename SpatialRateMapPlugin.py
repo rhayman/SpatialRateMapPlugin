@@ -307,12 +307,12 @@ class SpatialRateMap(ManualClusteringView):
         spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
         spk_weights = np.bincount(
             spk_times_in_pos_samples, minlength=self.OEBase.npos)
-        rmap = self.OEBase.RateMapMaker.getMap(spk_weights)
+        rmap = self.OEBase.RateMap.getMap(spk_weights)
         from ephysiopy.common import gridcell
 
-        S = gridcell.SAC()
         nodwell = ~np.isfinite(rmap[0])
-        sac = S.autoCorr2D(rmap[0], nodwell)
+        sac = self.OEBase.RateMap.autoCorr2D(rmap[0], nodwell)
+        S = gridcell.SAC()
         measures = S.getMeasures(sac)
         gs = measures["gridscore"]
         if ~np.isnan(gs):
