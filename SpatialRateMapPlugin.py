@@ -68,13 +68,10 @@ class SpatialRateMap(ManualClusteringView):
         ppm = 800
         setattr(OEBase, "ppm", ppm)
         jumpmax = 100
-        binsize = 3
-        setattr(OEBase, "binsize", binsize)
-        OEBase.binsize = binsize
         setattr(OEBase, "nchannels", 32)
         OEBase.load_pos_data(ppm, jumpmax, cm=False)
         OEBase.initialise()
-        setattr(OEBase.RateMap, "binsize", binsize)
+        setattr(OEBase.RateMap, "binsize", 8)
         setattr(self, "plot_type", "ratemap")
         x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
                   np.nanmax(OEBase.PosCalcs.xy[0]).astype(int))
@@ -164,6 +161,12 @@ class SpatialRateMap(ManualClusteringView):
             .replace(",", ""),
         )
         self.actions.add(
+            callback=self.setSmoothSize,
+            name="Set smoothing window",
+            prompt=True,
+            prompt_default=lambda: self.OEBase.RateMap.smooth_sz,
+        )
+        self.actions.add(
             callback=self.setXLims,
             name="Set x limits",
             prompt=True,
@@ -228,12 +231,15 @@ class SpatialRateMap(ManualClusteringView):
         return np.array(b.data)
 
     def setbinsize(self, binsz: int):
-        self.OEBase.binsize = binsz
         setattr(self.OEBase.RateMap, "binsize", binsz)
         self.replot()
 
-    def setNBins(self, b0: int, bn: int):
-        setattr(self.OEBase.RateMap, "nBins", (b0, bn))
+    def setNBins(self, bx: int, by: int):
+        setattr(self.OEBase.RateMap, "nBins", (bx, by))
+        self.replot()
+
+    def setSmoothSize(self, val: int):
+        setattr(self.OEBase.RateMap, "smooth_sz)", val)
         self.replot()
 
     def setPPM(self, ppm: int):
@@ -316,7 +322,6 @@ class SpatialRateMap(ManualClusteringView):
         spk_times = self.get_spike_times(self.cluster_ids[0])
         self.OEBase.makeSAC(spk_times, self.canvas.ax)
         # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
-        self.OEBase.initialise()
         spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
         spk_weights = np.bincount(
             spk_times_in_pos_samples, minlength=self.OEBase.npos)
