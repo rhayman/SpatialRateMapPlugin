@@ -69,7 +69,7 @@ class SpatialRateMap(ManualClusteringView):
         setattr(OEBase, "ppm", ppm)
         jumpmax = 100
         setattr(OEBase, "nchannels", 32)
-        OEBase.load_pos_data(ppm, jumpmax, cm=False)
+        OEBase.load_pos_data(ppm, jumpmax, cm=False, loadTTLPos=True)
         OEBase.initialise()
         setattr(OEBase.RateMap, "binsize", 8)
         setattr(self, "plot_type", "ratemap")
