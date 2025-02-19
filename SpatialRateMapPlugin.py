@@ -1,5 +1,6 @@
 import logging
 import os
+
 # Suppress warnings generated from doing the ffts for the
 # spatial autocorrelogram
 # see autoCorr2D and crossCorr2D
@@ -12,6 +13,7 @@ from ephysiopy.io.recording import OpenEphysBase
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
+
 # from phy.apps import capture_exceptions
 from phy.utils import selected_cluster_color
 
@@ -56,9 +58,7 @@ class SpatialRateMap(ManualClusteringView):
         """features is a function (cluster_id => Bunch(spike_times, ...))
         where data is a 3D array."""
         super(SpatialRateMap, self).__init__()
-        self.state_attrs += (
-            'ppm', 'binsize', 'x_lims', 'y_lims'
-        )
+        self.state_attrs += ("ppm", "binsize", "x_lims", "y_lims")
         self.features = features
         # do this for now - maybe give loading option in future
         print(f"Using ephysiopy version: {ephysiopy_vers}")
@@ -73,10 +73,14 @@ class SpatialRateMap(ManualClusteringView):
         OEBase.initialise()
         setattr(OEBase.RateMap, "binsize", 8)
         setattr(self, "plot_type", "ratemap")
-        x_lims = (np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
-                  np.nanmax(OEBase.PosCalcs.xy[0]).astype(int))
-        y_lims = (np.nanmin(OEBase.PosCalcs.xy[1]).astype(int),
-                  np.nanmax(OEBase.PosCalcs.xy[1]).astype(int))
+        x_lims = (
+            np.nanmin(OEBase.PosCalcs.xy[0]).astype(int),
+            np.nanmax(OEBase.PosCalcs.xy[0]).astype(int),
+        )
+        y_lims = (
+            np.nanmin(OEBase.PosCalcs.xy[1]).astype(int),
+            np.nanmax(OEBase.PosCalcs.xy[1]).astype(int),
+        )
         setattr(OEBase, "x_lims", x_lims)
         setattr(OEBase, "y_lims", y_lims)
         setattr(self, "OEBase", OEBase)
@@ -224,9 +228,9 @@ class SpatialRateMap(ManualClusteringView):
             self.plotSAC()
 
     def get_spike_times(self, id: int):
-        '''
+        """
         spike times are returned in seconds
-        '''
+        """
         b = self.features(id, load_all=True)
         return np.array(b.data)
 
@@ -292,51 +296,46 @@ class SpatialRateMap(ManualClusteringView):
         else:
             clusters = [self.cluster_ids[0]]
         for idx, cluster in enumerate(clusters):
-            spk_times = self.get_spike_times(cluster)
             col = selected_cluster_color(idx)[0:3]
-            self.OEBase.makeSpikePathPlot(
-                spk_times, ax=self.canvas.ax, markersize=3, c=col
-            )
+            self.OEBase.plot_spike_path(cluster, 1, ax=self.canvas.ax, s=3, c=col)
             self.canvas.update()
         self.plot_type = "spikes_on_path"
 
     def plotHeadDirection(self):
         self.canvas.ax.clear()
-        spk_times = self.get_spike_times(self.cluster_ids[0])
-        # print(f"OEBase speed masked: {np.ma.is_masked(self.OEBase.speed)}")
-        self.OEBase.makeSpeedVsHeadDirectionPlot(spk_times, self.canvas.ax)
-        self.canvas.ax.set_aspect(10)
-        self.canvas.ax.set_xlabel("Heading")
-        self.plot_type = "head_direction"
-        self.canvas.update()
+        for cluster in self.cluster_ids:
+            self.OEBase.plot_speed_v_hd(cluster, 1, ax=self.canvas.ax)
+            self.canvas.ax.set_aspect(10)
+            self.canvas.ax.set_xlabel("Heading")
+            self.plot_type = "head_direction"
+            self.canvas.update()
 
     def plotRateMap(self):
-        spk_times = self.get_spike_times(self.cluster_ids[0])
         self.canvas.ax.clear()
-        self.OEBase.makeRateMap(spk_times, self.canvas.ax)
-        self.plot_type = "ratemap"
-        self.canvas.update()
+        for cluster in self.cluster_ids:
+            self.OEBase.plot_rate_map(cluster, 1, ax=self.canvas.ax)
+            self.plot_type = "ratemap"
+            self.canvas.update()
 
     def plotSAC(self):
         self.canvas.ax.clear()
-        spk_times = self.get_spike_times(self.cluster_ids[0])
-        self.OEBase.makeSAC(spk_times, self.canvas.ax)
+        for cluster in self.cluster_ids:
+            self.OEBase.plot_sac(cluster, 1, ax=self.canvas.ax)
         # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
-        spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
-        spk_weights = np.bincount(
-            spk_times_in_pos_samples, minlength=self.OEBase.npos)
-        rmap = self.OEBase.RateMap.getMap(spk_weights)
-        from ephysiopy.common import gridcell
+        # spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
+        # spk_weights = np.bincount(spk_times_in_pos_samples, minlength=self.OEBase.npos)
+        # rmap = self.OEBase.RateMap.getMap(spk_weights)
+        # from ephysiopy.common import gridcell
 
-        nodwell = ~np.isfinite(rmap[0])
-        sac = self.OEBase.RateMap.autoCorr2D(rmap[0], nodwell)
-        S = gridcell.SAC()
-        measures = S.getMeasures(sac)
-        gs = measures["gridscore"]
-        if ~np.isnan(gs):
-            gs = str(gs)[0:5]
-        else:
-            gs = "NaN"
+        # nodwell = ~np.isfinite(rmap[0])
+        # sac = self.OEBase.RateMap.autoCorr2D(rmap[0], nodwell)
+        # S = gridcell.SAC()
+        # measures = S.getMeasures(sac)
+        # gs = measures["gridscore"]
+        # if ~np.isnan(gs):
+        #     gs = str(gs)[0:5]
+        # else:
+        gs = "NaN"
         self.canvas.ax.text(
             0.95,
             0.05,
@@ -355,7 +354,6 @@ class SpatialRateMapPlugin(IPlugin):
     def attach_to_controller(self, controller):
         def create_ratemap_view():
             """A function that creates and returns a view."""
-            return SpatialRateMap(
-                features=controller._get_feature_view_spike_times)
+            return SpatialRateMap(features=controller._get_feature_view_spike_times)
 
         controller.view_creator["SpatialRateMap"] = create_ratemap_view
