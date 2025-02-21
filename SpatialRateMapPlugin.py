@@ -1,15 +1,13 @@
 import logging
 import os
 
-# Suppress warnings generated from doing the ffts for the
-# spatial autocorrelogram
-# see autoCorr2D and crossCorr2D
 import warnings
 from pathlib import Path
 
 import numpy as np
 from ephysiopy.__about__ import __version__ as ephysiopy_vers
 from ephysiopy.io.recording import OpenEphysBase
+from ephysiopy.common.ephys_generic import PosCalcsGeneric
 from phy import IPlugin
 from phy.cluster.views import ManualClusteringView  # Base class for phy views
 from phy.plot.plot import PlotCanvasMpl  # matplotlib canvas
@@ -34,6 +32,31 @@ warnings.filterwarnings(
     true_divide",
 )
 logger = logging.getLogger("phy")
+
+
+def load_position_data() -> tuple:
+    """
+    Load position data including the timestamps for those positions
+
+    The organisation of the position data should be n_samples x 2 (i.e. x-y)
+    The organisation of the timestamps data should be n_samples x 1
+
+    The format of both files should be .npy
+
+    Returns
+    -------
+    A tuple of xy position (n_samples x 2) and position timestamps (n_samples x 1)
+
+    """
+    this_folder = os.getcwd()
+    # this should be the main recording folder under openephys recording directory structure:
+    path_to_top_folder = Path(this_folder).parents[4]
+    # you could define the location of the position and position_timestamps files with
+    # respect to this
+    xy_data = np.load(path_to_top_folder / Path("xy_data.npy"))
+    ts_data = np.load(path_to_top_folder / Path("position_timestamps.npy"))
+    assert len(ts_data) == len(xy_data[:, 0])
+    return xy_data, ts_data
 
 
 def fileContainsString(pname: str, searchStr: str) -> bool:
@@ -68,8 +91,32 @@ class SpatialRateMap(ManualClusteringView):
         ppm = 800
         setattr(OEBase, "ppm", ppm)
         jumpmax = 100
+        # this should be set based on the metadata (settings.xml or structure.oebin)
+        # depending on version I think
         setattr(OEBase, "nchannels", 32)
-        OEBase.load_pos_data(ppm, jumpmax, cm=False)
+        # try and load the pos data using the built in mechanism for the OpenEphysBase class...
+        warnings.filterwarnings(
+            "error"
+        )  # set this to catch the warning, reset in a bit...
+        try:
+            OEBase.load_pos_data(ppm, jumpmax, cm=False)
+        except UserWarning:  # need to inject the position data into the OEBase instance
+            try:
+                xy, xy_ts = load_position_data()
+                P = PosCalcsGeneric(
+                    xy[:, 0], xy[:, 1], cm=True, ppm=ppm, jumpmax=jumpmax
+                )
+                P.xyTS = xy_ts
+                pos_sample_rate = 50
+                P.sample_rate = pos_sample_rate
+                P.postprocesspos({"SampleRate": pos_sample_rate})
+                print("Loaded pos data from user file")
+                OEBase.PosCalcs = P
+            except Exception as e:
+                warnings.warn("Could not load position data")
+                print(e)
+        # ...reset warning to default
+        warnings.resetwarnings()
         OEBase.initialise()
         setattr(OEBase.RateMap, "binsize", 8)
         setattr(self, "plot_type", "ratemap")
@@ -321,33 +368,27 @@ class SpatialRateMap(ManualClusteringView):
         self.canvas.ax.clear()
         for cluster in self.cluster_ids:
             self.OEBase.plot_sac(cluster, 1, ax=self.canvas.ax)
-        # ----------- TEMP CODE FOR TEXT ANNOTATION DEBUG ----------
-        # spk_times_in_pos_samples = self.OEBase.getSpikePosIndices(spk_times)
-        # spk_weights = np.bincount(spk_times_in_pos_samples, minlength=self.OEBase.npos)
-        # rmap = self.OEBase.RateMap.getMap(spk_weights)
-        # from ephysiopy.common import gridcell
+            from ephysiopy.common.fieldcalcs import gridness
 
-        # nodwell = ~np.isfinite(rmap[0])
-        # sac = self.OEBase.RateMap.autoCorr2D(rmap[0], nodwell)
-        # S = gridcell.SAC()
-        # measures = S.getMeasures(sac)
-        # gs = measures["gridscore"]
-        # if ~np.isnan(gs):
-        #     gs = str(gs)[0:5]
-        # else:
-        gs = "NaN"
-        self.canvas.ax.text(
-            0.95,
-            0.05,
-            gs,
-            c="w",
-            fontsize=12,
-            ha="center",
-            va="top",
-            transform=self.canvas.ax.transAxes,
-        )
-        self.plot_type = "SAC"
-        self.canvas.update()
+            sac = self.OEBase.get_grid_map(cluster, 1)
+            # sac is an instance of BinnedData
+            gs, _, _ = gridness(sac.binned_data[0])
+            if ~np.isnan(gs):
+                gs = str(gs)[0:5]
+            else:
+                gs = "NaN"
+            self.canvas.ax.text(
+                0.95,
+                0.05,
+                gs,
+                c="w",
+                fontsize=12,
+                ha="center",
+                va="top",
+                transform=self.canvas.ax.transAxes,
+            )
+            self.plot_type = "SAC"
+            self.canvas.update()
 
 
 class SpatialRateMapPlugin(IPlugin):

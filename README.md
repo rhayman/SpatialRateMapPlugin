@@ -45,20 +45,78 @@ c.TemplateGUI.plugins = ['SpatialRateMapPlugin']
 
 Usage
 =====
-The most important thing the plugin needs (beyond ephysiopy) is a folder called "pos_data", **in the same place you've loaded phy from i.e where the spike_times.npy and spike_clusters.npy files are located from running KiloSort**. The pos_data folder must contain two files, one called data_array.npy and the other called timestamps.npy. They should look like this:
+The most important thing the plugin needs (beyond ephysiopy) is position data and the corresponding timestamps.
 
-data_array.npy - a 2 x m array where column 0 is x and column 1 is y.
+If you've used one of the plugins I've written (unlikely) to track animal position then the position data will be loaded for you.
 
-timestamps.npy - a vector of timestamps, again in samples, that matches the length of the pos samples in data_array (i.e. m samples long in the above convention)
+If you haven't then you need to provide the position data and the timestamps yourself. The function that loads the position data and
+timestamps is near the top of the SpatialRateMapPlugin.py file and is called load_position_data(). That assumes that
+the data is saved in the top level folder. If a folder structure like the following the two files are position_timestamps.npy and
+xy_data.npy and are in the folder called EAA-1123947_2025-01-22_11-36-18 (i.e. the top level folder):
 
-I've used positional data collected using a position tracker plugin I wrote for open-ephys (https://github.com/rhayman/PosTracker) which has a sample rate of ~30Hz as I've been using off-the-shelf webcams (I'm cheap). There is a variable called something like pos_sample_rate which has a default value of 30 for that reason but it shouldn't matter if that changes. Indeed it should have no impact in terms of what this plugin does. Regardless, you can change this if you want to (see the __init__ method of the plugin)
+EAA-1123947_2025-01-22_11-36-18
+├── position_timestamps.npy
+├── Record Node 104
+│   ├── experiment1
+│   │   └── recording1
+│   │       ├── continuous
+│   │       │   └── Acquisition_Board-100.Rhythm Data-A
+│   │       │       ├── amplitudes.npy
+│   │       │       ├── channel_map.npy
+│   │       │       ├── channel_positions.npy
+│   │       │       ├── cluster_Amplitude.tsv
+│   │       │       ├── cluster_ContamPct.tsv
+│   │       │       ├── cluster_group.tsv
+│   │       │       ├── cluster_KSLabel.tsv
+│   │       │       ├── continuous.dat
+│   │       │       ├── params.py
+│   │       │       ├── pc_feature_ind.npy
+│   │       │       ├── pc_features.npy
+│   │       │       ├── phy.log
+│   │       │       ├── rez.mat
+│   │       │       ├── sample_numbers.npy
+│   │       │       ├── similar_templates.npy
+│   │       │       ├── spike_clusters.npy
+│   │       │       ├── spike_templates.npy
+│   │       │       ├── spike_times.npy
+│   │       │       ├── template_feature_ind.npy
+│   │       │       ├── template_features.npy
+│   │       │       ├── templates_ind.npy
+│   │       │       ├── templates.npy
+│   │       │       ├── temp_wh.dat
+│   │       │       ├── timestamps.npy
+│   │       │       ├── whitening_mat_inv.npy
+│   │       │       └── whitening_mat.npy
+│   │       ├── events
+│   │       │   ├── Acquisition_Board-100.Rhythm Data-A
+│   │       │   │   └── TTL
+│   │       │   │       ├── full_words.npy
+│   │       │   │       ├── sample_numbers.npy
+│   │       │   │       ├── states.npy
+│   │       │   │       └── timestamps.npy
+│   │       │   ├── MessageCenter
+│   │       │   │   ├── sample_numbers.npy
+│   │       │   │   ├── text.npy
+│   │       │   │   └── timestamps.npy
+│   │       │   └── Ripple_Detector-102.Rhythm Data-A
+│   │       │       └── TTL
+│   │       │           ├── full_words.npy
+│   │       │           ├── sample_numbers.npy
+│   │       │           ├── states.npy
+│   │       │           └── timestamps.npy
+│   │       ├── structure.oebin
+│   │       └── sync_messages.txt
+│   └── settings.xml
+└── xy_data.npy
 
-The first time you start up phy with the stuff above done you'll need to go to View->SpatialRateMap or something. Hopefully that'll add the default view of the plugin to the phy-GUI.
 
 
-Dependencies
-============
-- astropy (https://www.astropy.org/) - this is the most obvious one; it's used for the spatial autocorrelograms as it handles NaNs in its convolution routines better than scipy/ numpy.
+xy_data.npy - an n_sample x 2 array where column 0 is x and column 1 is y.
+
+position_timestamps.npy - a vector of timestamps, again in samples, that matches the length of the pos samples in data_array
+
+The first time you start up phy you'll need to go to View->SpatialRateMap to add the plugin to the GUI.
+
 
 Contributors
 ============
