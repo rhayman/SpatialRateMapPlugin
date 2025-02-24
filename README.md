@@ -1,12 +1,12 @@
 Summary
 =======
 
-A plugin for the phy-gui (https://github.com/cortex-lab/phy) spike sorting package. Allows the plotting of 2D ratemaps (think place cells etc), polar head-direction plots and so on.
+A plugin for the phy-gui (https://github.com/cortex-lab/phy) spike sorting package. Allows the plotting of 2D ratemaps (place cells, grid cells etc), polar head-direction plots and a couple more.
 
 Longer summary
 ==============
 
-Assumes that data has been processed using KiloSort (https://github.com/MouseLand/Kilosort) and that there is a numpy (https://numpy.org/) format file that contains x/y data (so a 2 x nSamples array.)
+Assumes data has been processed using KiloSort (https://github.com/MouseLand/Kilosort) and that there are two additional numpy format files that containing xy data (as an n_samples x 2 array) and positional timestamps (n_samples x 1 array)
 
 Installation
 ============
@@ -45,14 +45,12 @@ c.TemplateGUI.plugins = ['SpatialRateMapPlugin']
 
 Usage
 =====
-The most important thing the plugin needs (beyond ephysiopy) is position data and the corresponding timestamps.
+The most important thing the plugin requires is position data and the corresponding timestamps.
 
-If you've used one of the plugins I've written (unlikely) to track animal position then the position data will be loaded for you.
-
-If you haven't then you need to provide the position data and the timestamps yourself. The function that loads the position data and
+You need to provide the position data and the timestamps yourself. The function that loads the position data and
 timestamps is near the top of the SpatialRateMapPlugin.py file and is called load_position_data(). That assumes that
-the data is saved in the top level folder. If a folder structure like the following the two files are position_timestamps.npy and
-xy_data.npy and are in the folder called EAA-1123947_2025-01-22_11-36-18 (i.e. the top level folder):
+the data is saved in the top level folder; in a folder structure like the following the two files are position_timestamps.npy and
+xy_data.npy and are in the folder called EAA-1123947_2025-01-22_11-36-18 (the top level folder):
 
 EAA-1123947_2025-01-22_11-36-18
 ├── position_timestamps.npy
@@ -110,8 +108,7 @@ EAA-1123947_2025-01-22_11-36-18
 └── xy_data.npy
 
 
-
-xy_data.npy - an n_sample x 2 array where column 0 is x and column 1 is y.
+xy_data.npy - an n_samples x 2 array where column 0 is x and column 1 is y.
 
 position_timestamps.npy - a vector of timestamps, again in samples, that matches the length of the pos samples in data_array
 
