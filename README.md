@@ -52,6 +52,7 @@ timestamps is near the top of the SpatialRateMapPlugin.py file and is called loa
 the data is saved in the top level folder; in a folder structure like the following the two files are position_timestamps.npy and
 xy_data.npy and are in the folder called EAA-1123947_2025-01-22_11-36-18 (the top level folder):
 
+```
 EAA-1123947_2025-01-22_11-36-18
 ├── position_timestamps.npy
 ├── Record Node 104
@@ -106,7 +107,7 @@ EAA-1123947_2025-01-22_11-36-18
 │   │       └── sync_messages.txt
 │   └── settings.xml
 └── xy_data.npy
-
+```
 
 xy_data.npy - an n_samples x 2 array where column 0 is x and column 1 is y.
 
